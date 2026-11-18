@@ -1,6 +1,7 @@
 const videoPath = /\.(mp4|mkv|webm|mov|m4v|avi)$/i;
 const pageSize = 4 * 1024 * 1024;
 const maxResults = 100;
+const catalogHost = "filmesmp4.biz";
 
 class RequestError extends Error {
   constructor(message, status = 400) {
@@ -74,8 +75,11 @@ async function checkPublicDns(hostname, signal) {
   }
 }
 
-async function requestSource(url, hosts, accept, signal) {
+async function requestSource(url, hosts, accept, signal, origin) {
   for (let redirects = 0; redirects <= 5; redirects++) {
+    if (origin && url.origin !== origin) {
+      throw new RequestError("O catálogo redirecionou para outro domínio.", 403);
+    }
     if (!hosts.size) await checkPublicDns(url.hostname, signal);
     const response = await fetch(url, {
       headers: { Accept: accept },
@@ -112,9 +116,9 @@ function filename(url) {
   }
 }
 
-async function search(url, hosts) {
+async function readHtml(url, hosts, origin) {
   const { response, url: base } = await requestSource(
-    url, hosts, "text/html, application/xhtml+xml", AbortSignal.timeout(15000),
+    url, hosts, "text/html, application/xhtml+xml", AbortSignal.timeout(15000), origin,
   );
   if (!["text/html", "application/xhtml+xml"].includes(contentType(response))) {
     await response.body.cancel();
@@ -131,6 +135,68 @@ async function search(url, hosts) {
       controller.enqueue(chunk);
     },
   }));
+  return { base, html: new Response(limited, { headers: response.headers }) };
+}
+
+async function catalog(url, hosts) {
+  if (url.hostname !== catalogHost) {
+    throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
+  }
+  const { base, html } = await readHtml(url, hosts, url.origin);
+  const titles = new Map();
+  let next = null;
+  let anchor = null;
+
+  function catalogLink(value) {
+    if (!value) return null;
+    try {
+      const link = allowedUrl(value, hosts, base);
+      return link.origin === base.origin ? link : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function pagination(element) {
+    const rel = element.getAttribute("rel")?.toLowerCase().split(/\s+/) ?? [];
+    if (!next && (rel.includes("next") ||
+      element.getAttribute("class")?.split(/\s+/).includes("next"))) {
+      const link = catalogLink(element.getAttribute("href"));
+      if (link && link.href !== base.href) next = link.href;
+    }
+  }
+
+  const parsed = new HTMLRewriter()
+    .on("link[rel][href]", { element: pagination })
+    .on("a[href]", {
+      element(element) {
+        pagination(element);
+        anchor = {
+          url: catalogLink(element.getAttribute("href")),
+          title: element.getAttribute("title"),
+        };
+        element.onEndTag(() => { anchor = null; });
+      },
+    })
+    .on("a[href] img", {
+      element(element) {
+        const link = anchor?.url;
+        if (!link || link.pathname === base.pathname || link.pathname === "/" ||
+          videoPath.test(link.pathname) || titles.size >= maxResults) return;
+        const title = element.getAttribute("alt")?.trim() || anchor.title?.trim() ||
+          filename(new URL(link.href.replace(/\/$/, ""))).replace(/[-_]/g, " ");
+        titles.set(link.href, { url: link.href, titulo: title });
+      },
+    })
+    .transform(html);
+  await parsed.body.pipeTo(new WritableStream());
+  return Response.json({ titulos: [...titles.values()], proxima: next }, {
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+async function search(url, hosts, origin) {
+  const { base, html } = await readHtml(url, hosts, origin);
   const videos = new Map();
   function collect(element, attribute) {
     const address = element.getAttribute(attribute)?.trim();
@@ -148,7 +214,7 @@ async function search(url, hosts) {
   const parsed = new HTMLRewriter()
     .on("a[href]", { element: element => collect(element, "href") })
     .on("video[src], source[src]", { element: element => collect(element, "src") })
-    .transform(new Response(limited, { headers: response.headers }));
+    .transform(html);
   await parsed.body.pipeTo(new WritableStream());
   return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size }, {
     headers: { "Cache-Control": "no-store" },
@@ -181,7 +247,7 @@ async function download(url, hosts) {
 export default {
   async fetch(request, env) {
     const endpoint = new URL(request.url);
-    if (!["/api/busca", "/api/baixar"].includes(endpoint.pathname)) {
+    if (!["/api/busca", "/api/baixar", "/api/catalogo"].includes(endpoint.pathname)) {
       return new Response("Página não encontrada.", { status: 404 });
     }
     if (request.method !== "GET") {
@@ -200,7 +266,16 @@ export default {
         throw new RequestError("Informe o endereço da página ou do vídeo.");
       }
       const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
-      return endpoint.pathname === "/api/busca" ? await search(url, hosts) : await download(url, hosts);
+      if (endpoint.pathname === "/api/catalogo") return await catalog(url, hosts);
+      if (endpoint.pathname === "/api/baixar") return await download(url, hosts);
+      let origin;
+      if (endpoint.searchParams.get("catalogo") === "1") {
+        if (url.hostname !== catalogHost) {
+          throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
+        }
+        origin = url.origin;
+      }
+      return await search(url, hosts, origin);
     } catch (error) {
       return Response.json({
         erro: error instanceof RequestError ? error.message : "Não foi possível consultar a fonte.",

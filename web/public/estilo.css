@@ -44,3 +44,7 @@ button:disabled { opacity: .6; cursor: wait; }
 ul { display: grid; gap: .6rem; padding: 0; list-style: none; }
 li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem; }
 li span { overflow-wrap: anywhere; }
+.catalogo { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.titulo { display: grid; justify-content: stretch; }
+.titulo div { display: flex; flex-wrap: wrap; gap: .5rem; overflow-wrap: anywhere; }
+.titulo a { padding: .45rem .7rem; max-width: 100%; }

@@ -41,3 +41,7 @@ A página web permite colar a URL do catálogo, buscar vídeos e baixar os resul
 3. Quando estiver pronto para publicar na sua conta, execute `npx wrangler login` e `npx wrangler deploy`. Abra o endereço que o Wrangler informar.
 
 O Worker serve a interface e processa a busca. A busca lê os links diretos do HTML da página informada, com limite de 100 resultados, e valida os domínios também nos redirecionamentos. No modo aberto, os resultados levam ao site de origem, que decide se o navegador vai baixar ou reproduzir o vídeo. Com uma lista de domínios configurada, o Worker pode transmitir o arquivo como download, inclusive automaticamente para um único resultado. Cada busca consome cota do Worker.
+
+### Varredura do catálogo FilmesMP4
+
+Na interface web, **Varrer catálogo FilmesMP4** abre as páginas associadas às capas e segue a paginação marcada no HTML. A busca mostra os links diretos encontrados em cada título e indica as consultas sem resultado ou com falha. O botão **Parar varredura** interrompe a busca e preserva o que já apareceu. A varredura depende da estrutura do HTML e da disponibilidade da origem e funciona enquanto a página estiver aberta.
