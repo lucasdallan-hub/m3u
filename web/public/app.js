@@ -22,10 +22,17 @@ form.addEventListener("submit", async event => {
       const name = document.createElement("span");
       const link = document.createElement("a");
       name.textContent = video.name;
-      link.textContent = "Baixar";
-      link.href = `/api/baixar?${new URLSearchParams({ url: video.url })}`;
-      link.download = "";
-      link.setAttribute("aria-label", `Baixar ${video.name}`);
+      if (data.downloadDireto) {
+        link.textContent = "Abrir vídeo";
+        link.href = video.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      } else {
+        link.textContent = "Baixar";
+        link.href = `/api/baixar?${new URLSearchParams({ url: video.url })}`;
+        link.download = "";
+      }
+      link.setAttribute("aria-label", `${link.textContent} ${video.name}`);
       row.append(name, link);
       results.append(row);
     }
@@ -33,7 +40,13 @@ form.addEventListener("submit", async event => {
     status.textContent = data.videos.length
       ? `${data.videos.length} vídeo(s) encontrado(s).`
       : "Nenhum link direto de vídeo foi encontrado nesta página.";
-    if (autoDownload && data.videos.length === 1) results.querySelector("a").click();
+    if (autoDownload && data.videos.length === 1) {
+      if (data.downloadDireto) {
+        status.textContent = "Abra o vídeo encontrado. O site de origem define se ele será baixado ou reproduzido.";
+      } else {
+        results.querySelector("a").click();
+      }
+    }
   } catch (error) {
     status.textContent = error.message;
   } finally {

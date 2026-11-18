@@ -36,8 +36,8 @@ O programa lê links de arquivos MP4, MKV, WebM, MOV, M4V e AVI presentes no HTM
 
 A página web permite colar a URL do catálogo, buscar vídeos e baixar os resultados pelo navegador. Ela pode iniciar o download quando a busca encontra um único vídeo e a opção correspondente está marcada. Se o navegador pedir confirmação ou bloquear o início automático, use o botão **Baixar**.
 
-1. Em `wrangler.jsonc`, preencha `DOMINIOS_PERMITIDOS` com os nomes exatos dos domínios autorizados, separados por vírgula. Inclua o domínio do catálogo e, se for diferente, o servidor dos vídeos. Exemplo de valor `catalogo.example.org,videos.example.org`.
+1. Deixe `DOMINIOS_PERMITIDOS` vazio em `wrangler.jsonc` para pesquisar em domínios públicos HTTPS. Para restringir a busca e habilitar downloads pelo Worker, informe os domínios exatos do catálogo e dos servidores de vídeo, separados por vírgula, como `catalogo.example.org,videos.example.org`.
 2. Com Node.js e npm disponíveis, execute `npx wrangler dev` na raiz para testar.
 3. Quando estiver pronto para publicar na sua conta, execute `npx wrangler login` e `npx wrangler deploy`. Abra o endereço que o Wrangler informar.
 
-O Worker serve a interface e processa a busca. A busca lê os links diretos do HTML da página informada, com limite de 100 resultados, e valida os domínios também nos redirecionamentos. Os downloads são transmitidos ao navegador pelo Worker, sem armazenamento na Cloudflare. Em uma instalação pública, qualquer visitante pode consultar os domínios autorizados e os pedidos consomem a cota do Worker.
+O Worker serve a interface e processa a busca. A busca lê os links diretos do HTML da página informada, com limite de 100 resultados, e valida os domínios também nos redirecionamentos. No modo aberto, os resultados levam ao site de origem, que decide se o navegador vai baixar ou reproduzir o vídeo. Com uma lista de domínios configurada, o Worker pode transmitir o arquivo como download, inclusive automaticamente para um único resultado. Cada busca consome cota do Worker.

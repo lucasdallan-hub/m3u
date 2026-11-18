@@ -18,16 +18,65 @@ function allowedUrl(value, hosts, base) {
   }
   if (
     url.protocol !== "https:" || url.port || url.username || url.password ||
-    !hosts.has(url.hostname)
+    (hosts.size ? !hosts.has(url.hostname) : !isPublicHostname(url.hostname))
   ) {
-    throw new RequestError("O endereço deve usar HTTPS e pertencer a um domínio autorizado.", 403);
+    throw new RequestError("Use um endereço HTTPS público permitido pela configuração.", 403);
   }
   url.hash = "";
   return url;
 }
 
+function isPublicHostname(hostname) {
+  return /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$/.test(hostname) &&
+    !/\.(?:localhost|local|internal|lan|onion|test|invalid|example|home\.arpa)$/.test(hostname);
+}
+
+function isPublicAddress(address, type) {
+  if (type === 28) {
+    const [first, second] = address.toLowerCase().split(":");
+    return /^[23][a-f0-9]{3}$/.test(first) && !["2002", "3fff"].includes(first) &&
+      !(first === "2001" && (!second || second === "db8" || parseInt(second, 16) < 0x200));
+  }
+  const [first, second, third] = address.split(".").map(Number);
+  return first > 0 && first < 224 && ![10, 127].includes(first) &&
+    !(first === 100 && second >= 64 && second <= 127) &&
+    !(first === 169 && second === 254) &&
+    !(first === 172 && second >= 16 && second <= 31) &&
+    !(first === 192 && (
+      second === 168 || (second === 0 && [0, 2].includes(third)) ||
+      (second === 88 && third === 99)
+    )) &&
+    !(first === 198 && ([18, 19].includes(second) || (second === 51 && third === 100))) &&
+    !(first === 203 && second === 0 && third === 113);
+}
+
+async function checkPublicDns(hostname, signal) {
+  const addresses = await Promise.all(["A", "AAAA"].map(async type => {
+    const query = new URL("https://cloudflare-dns.com/dns-query");
+    query.search = new URLSearchParams({ name: hostname, type });
+    const response = await fetch(query, {
+      headers: { Accept: "application/dns-json" },
+      redirect: "manual",
+      signal,
+    });
+    if (!response.ok) {
+      throw new RequestError("Não foi possível validar o domínio da fonte.", 502);
+    }
+    const answer = await response.json();
+    if (answer.Status !== 0) {
+      throw new RequestError("O domínio da fonte não pôde ser resolvido.", 422);
+    }
+    return (answer.Answer ?? []).filter(record => [1, 28].includes(record.type));
+  }));
+  const records = addresses.flat();
+  if (!records.length || records.some(({ data, type }) => !isPublicAddress(data, type))) {
+    throw new RequestError("O domínio precisa resolver para endereços públicos.", 403);
+  }
+}
+
 async function requestSource(url, hosts, accept, signal) {
   for (let redirects = 0; redirects <= 5; redirects++) {
+    if (!hosts.size) await checkPublicDns(url.hostname, signal);
     const response = await fetch(url, {
       headers: { Accept: accept },
       redirect: "manual",
@@ -101,7 +150,7 @@ async function search(url, hosts) {
     .on("video[src], source[src]", { element: element => collect(element, "src") })
     .transform(new Response(limited, { headers: response.headers }));
   await parsed.body.pipeTo(new WritableStream());
-  return Response.json({ videos: [...videos.values()] }, {
+  return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size }, {
     headers: { "Cache-Control": "no-store" },
   });
 }
@@ -143,8 +192,8 @@ export default {
       const hosts = new Set((env.DOMINIOS_PERMITIDOS ?? "").toLowerCase().split(",").map(
         host => host.trim(),
       ).filter(Boolean));
-      if (!hosts.size) {
-        throw new RequestError("Configure DOMINIOS_PERMITIDOS no Cloudflare Worker.", 503);
+      if (!hosts.size && endpoint.pathname === "/api/baixar") {
+        throw new RequestError("No modo aberto o vídeo é acessado no site de origem.", 403);
       }
       const value = endpoint.searchParams.get("url")?.trim();
       if (!value || value.length > 4096) {
