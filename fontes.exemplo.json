@@ -1,0 +1,6 @@
+{
+  "dominios_permitidos": ["catalogo.example.org", "videos.example.org"],
+  "paginas": ["https://catalogo.example.org/filmes"],
+  "pasta": "downloads",
+  "limite_mib": 4096
+}

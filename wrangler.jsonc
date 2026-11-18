@@ -1,0 +1,9 @@
+{
+  "name": "filmes-diretos",
+  "main": "web/worker.mjs",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": "./web/public" },
+  "vars": {
+    "DOMINIOS_PERMITIDOS": ""
+  }
+}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Filmes Diretos</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Filmes Diretos</h1>
+      <p>Encontre vídeos disponíveis para download em páginas autorizadas.</p>
+    </header>
+    <form id="busca">
+      <label for="url">Endereço da página</label>
+      <div class="campo">
+        <input id="url" type="text" inputmode="url" placeholder="https://catalogo.exemplo.org/filmes" required maxlength="4096">
+        <button type="submit">Buscar vídeos</button>
+      </div>
+      <label class="opcao"><input id="automatico" type="checkbox"> Baixar automaticamente quando houver um único resultado</label>
+    </form>
+    <section aria-label="Resultados da busca">
+      <p id="estado" role="status"></p>
+      <ul id="resultados"></ul>
+    </section>
+  </main>
+</body>
+</html>
