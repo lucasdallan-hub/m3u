@@ -379,7 +379,14 @@ async function serveCatalog(endpoint, url, hosts, context) {
 }
 
 const mirrorButton = /^(?:baixar\s+(?:(?:em|no|na|por|pelo|pela)\s+)?|download\s+)?(mega|daily|freedl|usersd)$/i;
-const downloadHeading = /^(?:baixar|downloads?)\s+.+$/i;
+const downloadButton = /^(?:baixar|download)(?:\s+(?:arquivo|torrent|magnet|\d{3,4}p))?$/i;
+const downloadHeading = /^(?:(?:baixar|downloads?)(?:\s+.+)?|dual [aá]udio|dublado|legendado)$/i;
+const downloadAttributes = [
+  "href", "data-href", "data-url", "data-download-url", "data-download",
+  "data-torrent", "data-magnet", "data-link", "data-clipboard-text",
+];
+const downloadControls = ["a", "button"]
+  .flatMap(tag => downloadAttributes.map(attribute => `${tag}[${attribute}]`)).join(", ");
 
 function buttonText(value) {
   return value.replace(/&nbsp;|&#160;|&#xA0;/gi, " ").replace(/\s+/g, " ").trim();
@@ -390,7 +397,7 @@ function canOpenMirror(url, hosts) {
     (url.hostname === catalogHost && /^\/dl\/?$/.test(url.pathname));
 }
 
-function addMirrorReaders(rewriter, base, groups, hosts) {
+function addDownloadReaders(rewriter, base, groups, hosts) {
   const headings = new Set();
   const unlabeledGroup = "Opções de download";
   let currentGroup = unlabeledGroup;
@@ -414,7 +421,7 @@ function addMirrorReaders(rewriter, base, groups, hosts) {
         });
       },
     })
-    .on("a[href], a[data-href], a[data-url], button[data-href], button[data-url]", {
+    .on(downloadControls, {
       element(element) {
         let group = currentGroup;
         for (const heading of headings) {
@@ -424,19 +431,33 @@ function addMirrorReaders(rewriter, base, groups, hosts) {
         currentGroup = group;
 
         let link;
-        for (const attribute of ["href", "data-href", "data-url"]) {
+        let media;
+        let mediaAttribute;
+        for (const attribute of downloadAttributes) {
           const address = htmlUrl(element.getAttribute(attribute));
           if (!address || address.startsWith("#")) continue;
+          if (attribute !== "href" && !/^(?:magnet:|https?:|\/|\.\.?\/)|\//i.test(address)) continue;
+          media = magnetLink(address);
+          if (media) {
+            mediaAttribute = attribute;
+            break;
+          }
           try {
             const candidate = allowedUrl(address, publicHosts, base, { keepHash: true });
             if (candidate.href === base.href) continue;
-            link = candidate;
-            break;
+            if (!link) link = candidate;
+            const name = filename(candidate);
+            if (torrentPath.test(name)) {
+              media = mediaFile(candidate, name);
+              mediaAttribute = attribute;
+              break;
+            }
           } catch {
             // Try the next static link attribute.
           }
         }
-        if (!link) return;
+        if (!link && !media) return;
+        const hasDownloadAttribute = element.hasAttribute("download");
 
         const capture = {
           text: "",
@@ -445,14 +466,19 @@ function addMirrorReaders(rewriter, base, groups, hosts) {
         button = capture;
         element.onEndTag(() => {
           button = null;
-          const name = [capture.text, ...capture.labels]
-            .map(label => mirrorButton.exec(buttonText(label ?? ""))?.[1])
-            .find(Boolean)?.toUpperCase();
-          if (!name) return;
+          const labels = [capture.text, ...capture.labels].map(label => buttonText(label ?? ""));
+          const mirror = labels.map(label => mirrorButton.exec(label)?.[1]).find(Boolean);
+          const explicitMedia = media && (mediaAttribute !== "href" || group !== unlabeledGroup);
+          if (!explicitMedia && !mirror && !hasDownloadAttribute && !labels.some(label => downloadButton.test(label))) {
+            return;
+          }
           if (!groups.has(group)) groups.set(group, new Map());
-          const entry = { nome: name, url: link.href };
-          if (canOpenMirror(link, hosts)) entry.atalho = true;
-          groups.get(group).set(link.href, entry);
+          const name = mirror?.toUpperCase() || (media?.tipo === "magnet" ? "Abrir no BitTorrent" : "Baixar");
+          const entry = { nome: name, url: media?.url ?? link.href };
+          if (media) entry.tipo = media.tipo;
+          const address = entry.tipo === "torrent" ? new URL(entry.url) : link;
+          if (address && entry.url === address.href && canOpenMirror(address, hosts)) entry.atalho = true;
+          groups.get(group).set(entry.url, entry);
         });
       },
     })
@@ -508,10 +534,15 @@ async function search(url, hosts, origin) {
   const rewriter = new HTMLRewriter();
   readMediaLinks(rewriter, videos, base, hosts);
   const groups = new Map();
-  if (origin) addMirrorReaders(rewriter, base, groups, hosts);
+  if (origin) addDownloadReaders(rewriter, base, groups, hosts);
   const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
   const opcoes = [...groups].map(([titulo, links]) => ({ titulo, links: [...links.values()] }));
+  for (const { links } of opcoes) {
+    for (const link of links) {
+      if (link.tipo === "magnet" || link.tipo === "torrent") videos.delete(link.url);
+    }
+  }
   return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size, ...(origin ? { opcoes } : {}) }, {
     headers: apiHeaders,
   });

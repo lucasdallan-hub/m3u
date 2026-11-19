@@ -353,10 +353,12 @@ button:disabled { opacity: .53; cursor: wait; }
   line-height: 1.03;
   letter-spacing: -.06em;
 }
-#estado-titulo { margin-block: .85rem 1.1rem; }
+.detalhe-downloads { margin-top: clamp(1.1rem, 3vw, 1.7rem); }
+.detalhe-downloads h2 { font-size: 1.25rem; }
+#estado-titulo { margin-block: .5rem 1.1rem; }
 #origem-titulo { margin-top: 1rem; }
 #downloads > .download-grupo { padding: 1rem; background: #242127; }
-.download-grupo h2 {
+.download-grupo h3 {
   margin-bottom: .8rem;
   font-size: 1rem;
   letter-spacing: -.015em;

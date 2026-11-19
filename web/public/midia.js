@@ -13,7 +13,7 @@ export function publicHttps(value) {
   return null;
 }
 
-function magnetUrl(value) {
+export function magnetUrl(value) {
   if (typeof value !== "string" || value.length > 4096) return null;
   try {
     const url = new URL(value);

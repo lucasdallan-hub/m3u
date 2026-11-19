@@ -1,5 +1,5 @@
 import { query } from "./api.js";
-import { addMediaLinks, publicHttps } from "./midia.js";
+import { addMediaLinks, magnetUrl, publicHttps } from "./midia.js";
 
 const parameters = new URLSearchParams(location.search);
 const heading = document.querySelector("#nome-titulo");
@@ -21,7 +21,11 @@ function setNewTabLink(link, href) {
   link.rel = "noopener noreferrer";
 }
 
-function showOptions(options) {
+function mediaAddress(item) {
+  return item?.tipo === "magnet" ? magnetUrl(item.url) : publicHttps(item?.url);
+}
+
+function showOptions(options, downloadDireto, directLinks, groupedLinks) {
   let count = 0;
   for (const option of options) {
     if (typeof option?.titulo !== "string" || !Array.isArray(option.links)) continue;
@@ -29,23 +33,33 @@ function showOptions(options) {
     if (!title) continue;
     const links = document.createElement("ul");
     for (const item of option.links) {
-      const url = publicHttps(item?.url);
+      const url = mediaAddress(item);
       const name = typeof item?.nome === "string" ? item.nome.trim() : "";
-      if (!url || !name) continue;
+      if (!url || !name || groupedLinks.has(url.href) || (!item.tipo && directLinks.has(url.href))) continue;
       const link = document.createElement("a");
       link.textContent = name;
-      const href = item.atalho === true
-        ? `/api/abrir?${new URLSearchParams({ url: url.href })}`
-        : url.href;
-      setNewTabLink(link, href);
+      if (item.tipo === "magnet") {
+        link.href = url.href;
+        link.setAttribute("aria-label", `${name} no cliente BitTorrent`);
+      } else if (item.tipo === "torrent" && item.atalho === true && !downloadDireto) {
+        link.href = `/api/baixar?${new URLSearchParams({ url: url.href })}`;
+        link.download = "";
+        link.setAttribute("aria-label", `Baixar arquivo .torrent ${name}`);
+      } else {
+        const href = item.tipo !== "torrent" && item.atalho === true
+          ? `/api/abrir?${new URLSearchParams({ url: url.href })}`
+          : url.href;
+        setNewTabLink(link, href);
+      }
       const row = document.createElement("li");
       row.append(link);
       links.append(row);
+      groupedLinks.add(url.href);
     }
     if (!links.childElementCount) continue;
     const group = document.createElement("li");
     group.className = "download-grupo";
-    const label = document.createElement("h2");
+    const label = document.createElement("h3");
     label.textContent = title;
     group.append(label, links);
     downloads.append(group);
@@ -55,8 +69,18 @@ function showOptions(options) {
 }
 
 function showDownloads({ videos, downloadDireto, opcoes }) {
-  const optionsCount = Array.isArray(opcoes) ? showOptions(opcoes) : 0;
-  const links = addMediaLinks(downloads, videos, downloadDireto);
+  const directLinks = new Map();
+  for (const video of videos) {
+    const url = mediaAddress(video);
+    if (url && typeof video.name === "string") directLinks.set(url.href, video);
+  }
+  const groupedLinks = new Set();
+  const optionsCount = Array.isArray(opcoes) ? showOptions(opcoes, downloadDireto, directLinks, groupedLinks) : 0;
+  const remainingVideos = [];
+  for (const [url, video] of directLinks) {
+    if (!groupedLinks.has(url)) remainingVideos.push(video);
+  }
+  const links = addMediaLinks(downloads, remainingVideos, downloadDireto);
 
   const count = optionsCount + links.length;
   if (!count) {
