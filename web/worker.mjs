@@ -185,7 +185,17 @@ async function catalog(url, hosts) {
           videoPath.test(link.pathname) || titles.size >= maxResults) return;
         const title = element.getAttribute("alt")?.trim() || anchor.title?.trim() ||
           filename(new URL(link.href.replace(/\/$/, ""))).replace(/[-_]/g, " ");
-        titles.set(link.href, { url: link.href, titulo: title });
+        const entry = titles.get(link.href) ?? { url: link.href, titulo: title, capa: null };
+        for (const attribute of ["data-src", "data-lazy-src", "data-original", "src"]) {
+          const value = element.getAttribute(attribute)?.trim();
+          if (!value || entry.capa) continue;
+          try {
+            entry.capa = allowedUrl(value, new Set(), base).href;
+          } catch {
+            // Ignore placeholders and try the next image attribute.
+          }
+        }
+        titles.set(link.href, entry);
       },
     })
     .transform(html);

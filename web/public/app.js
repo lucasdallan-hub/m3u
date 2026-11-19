@@ -90,7 +90,26 @@ function showTitle(title, data) {
       links.append(link);
     }
   }
-  row.append(name, links);
+  const cover = document.createElement("div");
+  cover.className = "capa";
+  cover.setAttribute("aria-hidden", "true");
+  cover.textContent = "Sem capa";
+  if (title.capa) {
+    const image = document.createElement("img");
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.referrerPolicy = "no-referrer";
+    image.addEventListener("error", () => image.remove(), { once: true });
+    image.src = title.capa;
+    cover.append(image);
+  }
+
+  const details = document.createElement("div");
+  details.className = "titulo-detalhes";
+  links.className = "titulo-links";
+  details.append(name, links);
+  row.append(cover, details);
   results.append(row);
 }
 
