@@ -10,6 +10,7 @@ form.addEventListener("submit", async event => {
   const autoDownload = automatic.checked;
   if (scan || button.disabled) return;
   results.replaceChildren();
+  results.classList.remove("grade-catalogo");
   status.textContent = "Buscando vídeos…";
   button.disabled = scanButton.disabled = true;
 
@@ -66,12 +67,8 @@ async function query(endpoint, parameters, signal) {
   return data;
 }
 
-function showTitle(title, data) {
-  const row = document.createElement("li");
-  row.className = "titulo";
-  const name = document.createElement("strong");
-  name.textContent = title.titulo;
-  const links = document.createElement("div");
+function fillTitleLinks(links, data) {
+  links.replaceChildren();
   if (!data?.videos.length) {
     links.textContent = data ? "Sem link direto publicado" : "Falha ao consultar";
   } else {
@@ -90,6 +87,15 @@ function showTitle(title, data) {
       links.append(link);
     }
   }
+}
+
+function showTitle(title) {
+  const row = document.createElement("li");
+  row.className = "titulo";
+  const name = document.createElement("strong");
+  name.textContent = title.titulo;
+  const links = document.createElement("div");
+  links.textContent = "Aguardando consulta dos links…";
   const cover = document.createElement("div");
   cover.className = "capa";
   cover.setAttribute("aria-hidden", "true");
@@ -111,6 +117,7 @@ function showTitle(title, data) {
   details.append(name, links);
   row.append(cover, details);
   results.append(row);
+  return links;
 }
 
 stopButton.addEventListener("click", () => scan?.abort());
@@ -121,6 +128,7 @@ scanButton.addEventListener("click", async () => {
   scanButton.disabled = button.disabled = true;
   stopButton.hidden = false;
   results.replaceChildren();
+  results.classList.add("grade-catalogo");
   status.textContent = "Buscando capas no catálogo…";
   const pages = new Set();
   const titles = new Set();
@@ -129,38 +137,53 @@ scanButton.addEventListener("click", async () => {
   let found = 0;
   let failures = 0;
 
+  const queue = [];
+  let catalogError;
   try {
     while (page && !pages.has(page)) {
       pages.add(page);
-      const catalog = await query("catalogo", { url: page }, signal);
-      const queue = catalog.titulos.filter(title => !titles.has(title.url));
-      for (const title of queue) titles.add(title.url);
-      const inspect = async () => {
-        while (queue.length && !signal.aborted) {
-          const title = queue.shift();
-          let data;
-          try {
-            data = await query("busca", { url: title.url, catalogo: "1" }, signal);
-          } catch (error) {
-            if (signal.aborted) return;
-            failures++;
-          }
-          showTitle(title, data);
-          checked++;
-          if (data?.videos.length) found++;
-          status.textContent = `${checked} título(s) consultado(s), ${found} com links.`;
-        }
-      };
-      await Promise.all([inspect(), inspect()]);
-      signal.throwIfAborted();
+      let catalog;
+      try {
+        catalog = await query("catalogo", { url: page }, signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        catalogError = error.message;
+        break;
+      }
+      for (const title of catalog.titulos) {
+        if (titles.has(title.url)) continue;
+        titles.add(title.url);
+        queue.push({ title, links: showTitle(title) });
+      }
+      status.textContent = `${titles.size} título(s) no catálogo. Buscando mais capas…`;
       page = catalog.proxima;
     }
+
+    const inspect = async () => {
+      while (queue.length && !signal.aborted) {
+        const { title, links } = queue.shift();
+        let data;
+        try {
+          data = await query("busca", { url: title.url, catalogo: "1" }, signal);
+        } catch {
+          if (signal.aborted) return;
+          failures++;
+        }
+        fillTitleLinks(links, data);
+        checked++;
+        if (data?.videos.length) found++;
+        status.textContent = `${checked} de ${titles.size} título(s) consultado(s), ${found} com links.`;
+      }
+    };
+    await Promise.all([inspect(), inspect()]);
+    signal.throwIfAborted();
     status.textContent = checked
       ? `${checked} título(s) consultado(s), ${found} com links e ${failures} com falha.`
       : "Nenhuma capa com link foi encontrada nas páginas do catálogo.";
+    if (catalogError) status.textContent += ` Falha ao carregar o catálogo. ${catalogError}`;
   } catch (error) {
     status.textContent = signal.aborted
-      ? `Varredura interrompida após ${checked} título(s).`
+      ? `Varredura interrompida. ${titles.size} capa(s) listada(s), ${checked} título(s) consultado(s).`
       : `Varredura interrompida após ${checked} título(s). ${error.message}`;
   } finally {
     scanButton.disabled = button.disabled = false;

@@ -138,6 +138,30 @@ async function readHtml(url, hosts, origin) {
   return { base, html: new Response(limited, { headers: response.headers }) };
 }
 
+function coverUrl(element, base) {
+  const attributes = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-poster", "data-bg"];
+  const candidates = attributes.map(attribute => element.getAttribute(attribute));
+  for (const attribute of ["data-srcset", "data-lazy-srcset", "srcset"]) {
+    const srcset = element.getAttribute(attribute);
+    if (srcset && !srcset.trimStart().startsWith("data:")) {
+      candidates.push(...srcset.split(",").map(candidate => candidate.trim().split(/\s+/)[0]));
+    }
+  }
+  candidates.push(
+    element.getAttribute("style")?.match(/background(?:-image)?\s*:[^;]*?url\(\s*["']?([^"'()]+)["']?\s*\)/i)?.[1],
+    element.getAttribute("src"),
+  );
+  for (const candidate of candidates) {
+    if (!candidate?.trim()) continue;
+    try {
+      return allowedUrl(candidate.trim(), new Set(), base).href;
+    } catch {
+      // Try the next candidate when a placeholder or a non-public URL is provided.
+    }
+  }
+  return null;
+}
+
 async function catalog(url, hosts) {
   if (url.hostname !== catalogHost) {
     throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
@@ -166,6 +190,24 @@ async function catalog(url, hosts) {
     }
   }
 
+  function captureCover(element) {
+    const link = anchor?.url;
+    if (!link || link.href === base.href || (link.pathname === "/" && !link.search) ||
+      videoPath.test(link.pathname) || link.href === next) return;
+    const image = coverUrl(element, base);
+    if (!image && element.tagName !== "img") return;
+    const alt = element.getAttribute("alt")?.trim();
+    const existing = titles.get(link.href);
+    const title = alt || anchor.title ||
+      (filename(new URL(link.pathname.replace(/\/$/, "") || "/", link.origin)) || link.search)
+        .replace(/[-_]/g, " ");
+    titles.set(link.href, {
+      url: link.href,
+      titulo: alt || existing?.titulo || title,
+      capa: existing?.capa || image,
+    });
+  }
+
   const parsed = new HTMLRewriter()
     .on("link[rel][href]", { element: pagination })
     .on("a[href]", {
@@ -173,30 +215,14 @@ async function catalog(url, hosts) {
         pagination(element);
         anchor = {
           url: catalogLink(element.getAttribute("href")),
-          title: element.getAttribute("title"),
+          title: element.getAttribute("title")?.trim() || element.getAttribute("aria-label")?.trim(),
         };
+        captureCover(element);
         element.onEndTag(() => { anchor = null; });
       },
     })
-    .on("a[href] img", {
-      element(element) {
-        const link = anchor?.url;
-        if (!link || link.pathname === base.pathname || link.pathname === "/" ||
-          videoPath.test(link.pathname) || titles.size >= maxResults) return;
-        const title = element.getAttribute("alt")?.trim() || anchor.title?.trim() ||
-          filename(new URL(link.href.replace(/\/$/, ""))).replace(/[-_]/g, " ");
-        const entry = titles.get(link.href) ?? { url: link.href, titulo: title, capa: null };
-        for (const attribute of ["data-src", "data-lazy-src", "data-original", "src"]) {
-          const value = element.getAttribute(attribute)?.trim();
-          if (!value || entry.capa) continue;
-          try {
-            entry.capa = allowedUrl(value, new Set(), base).href;
-          } catch {
-            // Ignore placeholders and try the next image attribute.
-          }
-        }
-        titles.set(link.href, entry);
-      },
+    .on("a[href] img, a[href] picture source, a[href] [style], a[href] [data-bg], a[href] [data-poster]", {
+      element: captureCover,
     })
     .transform(html);
   await parsed.body.pipeTo(new WritableStream());
