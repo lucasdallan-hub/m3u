@@ -29,8 +29,8 @@ async function getDownloads(source) {
   return data;
 }
 
-function setExternalLink(link, url) {
-  link.href = url.href;
+function setNewTabLink(link, href) {
+  link.href = href;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
 }
@@ -48,7 +48,10 @@ function showOptions(options) {
       if (!url || !name) continue;
       const link = document.createElement("a");
       link.textContent = name;
-      setExternalLink(link, url);
+      const href = item.atalho === true
+        ? `/api/abrir?${new URLSearchParams({ url: url.href })}`
+        : url.href;
+      setNewTabLink(link, href);
       const row = document.createElement("li");
       row.append(link);
       links.append(row);
@@ -77,7 +80,7 @@ function showDownloads({ videos, downloadDireto, opcoes }) {
     name.textContent = video.name;
     if (downloadDireto) {
       link.textContent = "Abrir arquivo";
-      setExternalLink(link, url);
+      setNewTabLink(link, url.href);
     } else {
       link.textContent = "Baixar";
       link.href = `/api/baixar?${new URLSearchParams({ url: url.href })}`;
@@ -100,11 +103,17 @@ function showDownloads({ videos, downloadDireto, opcoes }) {
 }
 
 const source = publicHttps(parameters.get("url"));
-if (source?.hostname !== "filmesmp4.biz") {
+if (!source) {
   status.textContent = "Abra um filme ou série a partir do catálogo para buscar as opções de download.";
 } else {
+  const catalog = publicHttps(parameters.get("catalogo"));
+  if (catalog) {
+    document.querySelector(".detalhe-voltar").href = `/?${new URLSearchParams({ catalogo: catalog.href })}`;
+  }
   const original = document.querySelector("#origem-titulo");
-  setExternalLink(original.querySelector("a"), source);
+  const originalLink = original.querySelector("a");
+  originalLink.textContent = `Abrir página original em ${source.hostname}`;
+  setNewTabLink(originalLink, source.href);
   original.hidden = false;
 
   const title = parameters.get("titulo")?.trim();

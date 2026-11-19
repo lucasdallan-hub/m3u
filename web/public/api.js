@@ -1,7 +1,9 @@
 const catalogRetryLimitMs = 3000;
+const catalogTransientStatuses = new Set([429, 502, 503, 504]);
 const catalogCacheKey = "filmes-diretos:catalogo:v1";
 const catalogCacheMaxAgeMs = 24 * 60 * 60 * 1000;
 const catalogCacheMaxPages = 16;
+const catalogCacheMaxInitialPages = 6;
 const catalogCacheMaxCharacters = 512 * 1024;
 
 function isCatalogPage(data) {
@@ -31,18 +33,35 @@ function cachedCatalogPage(url) {
   return entry && { ...entry.data, desatualizado: true };
 }
 
-function saveCatalogPage(url, data) {
+function saveCatalogPage(url, data, paginaInicial) {
   const entries = readCatalogCache();
-  const index = entries.findIndex(page => page.url === url);
-  // Keep the first pages available after a scan of a large catalog.
-  if (index === -1 && entries.length >= catalogCacheMaxPages) return;
+  const previous = entries.find(page => page.url === url);
   const { proxima } = data;
   const titulos = data.titulos.map(({ titulo, url, capa }) => ({ titulo, url, capa }));
-  const entry = { url, data: { titulos, proxima }, savedAt: Date.now() };
-  entries[index === -1 ? entries.length : index] = entry;
+  const entry = {
+    url,
+    data: { titulos, proxima },
+    savedAt: Date.now(),
+    paginaInicial: paginaInicial || previous?.paginaInicial === true,
+  };
+  const recent = [entry, ...entries.filter(page => page.url !== url).sort(
+    (left, right) => right.savedAt - left.savedAt,
+  )];
+  const initialPages = new Set(recent.filter(page => page.paginaInicial === true)
+    .slice(0, catalogCacheMaxInitialPages));
+  const ordered = [...initialPages, ...recent.filter(page => !initialPages.has(page))];
   try {
-    const serialized = JSON.stringify(entries);
-    if (serialized.length <= catalogCacheMaxCharacters) localStorage.setItem(catalogCacheKey, serialized);
+    const saved = [];
+    let size = 2;
+    for (const page of ordered) {
+      const serialized = JSON.stringify(page);
+      const addedSize = serialized.length + Number(saved.length > 0);
+      if (size + addedSize > catalogCacheMaxCharacters) continue;
+      saved.push(serialized);
+      size += addedSize;
+      if (saved.length === catalogCacheMaxPages) break;
+    }
+    if (saved.length) localStorage.setItem(catalogCacheKey, `[${saved.join(",")}]`);
   } catch {
     // The current response remains usable without local storage.
   }
@@ -50,9 +69,11 @@ function saveCatalogPage(url, data) {
 
 function retryDelay(response) {
   const value = response.headers.get("Retry-After")?.trim();
-  if (!value) return 600;
-  const delay = /^\d+$/.test(value) ? Number(value) * 1000 : Date.parse(value) - Date.now();
-  return Number.isNaN(delay) ? 600 : Math.max(0, delay);
+  const defaultDelay = response.status === 429 ? 1000 : 600;
+  if (!value) return defaultDelay;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const date = /[a-z]/i.test(value) ? Date.parse(value) : NaN;
+  return Number.isNaN(date) ? defaultDelay : Math.max(0, date - Date.now());
 }
 
 function waitForRetry(delay, signal) {
@@ -70,7 +91,7 @@ function waitForRetry(delay, signal) {
   });
 }
 
-export async function query(endpoint, parameters, signal) {
+export async function query(endpoint, parameters, signal, { paginaInicial = false } = {}) {
   const search = new URLSearchParams(parameters);
   const url = `/api/${endpoint}?${search}`;
   const catalogUrl = endpoint === "catalogo" ? search.get("url") : null;
@@ -82,13 +103,19 @@ export async function query(endpoint, parameters, signal) {
   let response;
   try {
     response = await fetch(url, options);
-    if (catalogUrl && response.status === 503) {
-      const delay = retryDelay(response);
-      if (delay <= catalogRetryLimitMs) {
+    for (let attempt = 0; catalogUrl && catalogTransientStatuses.has(response.status); attempt++) {
+      signal?.throwIfAborted();
+      const saved = cachedCatalogPage(catalogUrl);
+      if (saved) {
         await response.body?.cancel();
-        await waitForRetry(delay, signal);
-        response = await fetch(url, options);
+        signal?.throwIfAborted();
+        return saved;
       }
+      const delay = retryDelay(response);
+      if (attempt === 1 || delay > catalogRetryLimitMs) break;
+      await response.body?.cancel();
+      await waitForRetry(delay, signal);
+      response = await fetch(url, options);
     }
   } catch (error) {
     signal?.throwIfAborted();
@@ -98,17 +125,9 @@ export async function query(endpoint, parameters, signal) {
     throw new Error("Não foi possível conectar ao serviço do catálogo.", { cause: error });
   }
 
-  let unavailableMessage;
-  if (catalogUrl && response.status === 503) {
-    signal?.throwIfAborted();
-    const saved = cachedCatalogPage(catalogUrl);
-    if (saved) {
-      await response.body?.cancel();
-      signal?.throwIfAborted();
-      return saved;
-    }
-    unavailableMessage = "O serviço do catálogo está temporariamente indisponível (HTTP 503).";
-  }
+  const unavailableMessage = catalogUrl && catalogTransientStatuses.has(response.status)
+    ? `O serviço do catálogo está temporariamente indisponível (HTTP ${response.status}).`
+    : null;
   const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
     if (response.ok || response.status === 404) {
@@ -122,12 +141,12 @@ export async function query(endpoint, parameters, signal) {
     data = await response.json();
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
-    throw new Error("A API devolveu uma resposta JSON inválida.");
+    throw new Error(unavailableMessage || "A API devolveu uma resposta JSON inválida.");
   }
   if (!response.ok) throw new Error(data?.erro || unavailableMessage || `A consulta falhou (HTTP ${response.status}).`);
   if (catalogUrl) {
     if (!isCatalogPage(data)) throw new Error("A API devolveu uma página de catálogo inválida.");
-    if (data.desatualizado !== true && data.titulos.length) saveCatalogPage(catalogUrl, data);
+    if (data.desatualizado !== true && data.titulos.length) saveCatalogPage(catalogUrl, data, paginaInicial);
   }
   return data;
 }

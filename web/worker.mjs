@@ -4,6 +4,9 @@ const maxResults = 100;
 const catalogHost = "filmesmp4.biz";
 const catalogFreshMs = 2 * 60 * 1000;
 const catalogRetentionSeconds = 24 * 60 * 60;
+const redirects = new Set([301, 302, 303, 307, 308]);
+const transientStatuses = new Set([429, 502, 503, 504]);
+const publicHosts = new Set();
 
 class RequestError extends Error {
   constructor(message, status = 400, retryAfter = null) {
@@ -58,11 +61,11 @@ async function checkPublicDns(hostname, signal) {
   const addresses = await Promise.all(["A", "AAAA"].map(async type => {
     const query = new URL("https://cloudflare-dns.com/dns-query");
     query.search = new URLSearchParams({ name: hostname, type });
-    const response = await fetch(query, {
+    const response = await fetchSource(query, {
       headers: { Accept: "application/dns-json" },
       redirect: "manual",
       signal,
-    });
+    }, "o serviço de DNS");
     if (!response.ok) {
       await response.body?.cancel();
       if (response.status === 503) {
@@ -72,7 +75,12 @@ async function checkPublicDns(hostname, signal) {
           response.headers.get("Retry-After"),
         );
       }
-      throw new RequestError("Não foi possível validar o domínio da fonte.", 502);
+      const status = upstreamStatus(response.status);
+      throw new RequestError(
+        `O serviço de DNS respondeu com HTTP ${response.status}.`,
+        status,
+        response.headers.get("Retry-After"),
+      );
     }
     const answer = await response.json();
     if (answer.Status !== 0) {
@@ -86,21 +94,41 @@ async function checkPublicDns(hostname, signal) {
   }
 }
 
+function upstreamStatus(status) {
+  return (status >= 400 && status < 500) || transientStatuses.has(status) ? status : 502;
+}
+
+async function fetchSource(url, options, service) {
+  try {
+    return await fetch(url, options);
+  } catch {
+    if (options.signal?.aborted) {
+      throw new RequestError(`O tempo para consultar ${service} se esgotou.`, 504);
+    }
+    throw new RequestError(`Não foi possível conectar a ${service}.`, 502);
+  }
+}
+
+function sameCatalogHost(url, origin) {
+  const domain = hostname => hostname.replace(/^www\./, "");
+  return domain(url.hostname) === domain(new URL(origin).hostname);
+}
+
 async function requestSource(url, hosts, accept, signal, origin) {
-  for (let redirects = 0; redirects <= 5; redirects++) {
-    if (origin && url.origin !== origin) {
+  for (let hops = 0; hops <= 5; hops++) {
+    if (origin && !sameCatalogHost(url, origin)) {
       throw new RequestError("O catálogo redirecionou para outro domínio.", 403);
     }
     if (!hosts.size) await checkPublicDns(url.hostname, signal);
-    const response = await fetch(url, {
+    const response = await fetchSource(url, {
       headers: { Accept: accept },
       redirect: "manual",
       signal,
-    });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
+    }, "o site de origem");
+    if (redirects.has(response.status)) {
       const next = response.headers.get("Location");
       await response.body?.cancel();
-      if (!next || redirects === 5) {
+      if (!next || hops === 5) {
         throw new RequestError("A fonte retornou um redirecionamento inválido.", 502);
       }
       url = allowedUrl(next, hosts, url);
@@ -115,7 +143,11 @@ async function requestSource(url, hosts, accept, signal, origin) {
           response.headers.get("Retry-After"),
         );
       }
-      throw new RequestError(`A fonte respondeu com HTTP ${response.status}.`, 502);
+      throw new RequestError(
+        `A fonte respondeu com HTTP ${response.status}.`,
+        upstreamStatus(response.status),
+        response.headers.get("Retry-After"),
+      );
     }
     return { response, url };
   }
@@ -139,26 +171,33 @@ function filename(url) {
   }
 }
 
-async function readHtml(url, hosts, origin) {
-  const { response, url: base } = await requestSource(
-    url, hosts, "text/html, application/xhtml+xml", AbortSignal.timeout(15000), origin,
-  );
-  if (!["text/html", "application/xhtml+xml"].includes(contentType(response))) {
-    await response.body.cancel();
-    throw new RequestError("Informe o endereço de uma página HTML.");
-  }
-
+function boundedHtml(response, limit = pageSize) {
   let bytes = 0;
   const limited = response.body.pipeThrough(new TransformStream({
     transform(chunk, controller) {
       bytes += chunk.byteLength;
-      if (bytes > pageSize) {
-        throw new RequestError("A página ultrapassa o limite de 4 MiB.", 413);
+      if (bytes > limit) {
+        throw new RequestError("A página ultrapassa o limite de leitura.", 413);
       }
       controller.enqueue(chunk);
     },
   }));
-  return { base, html: new Response(limited, { headers: response.headers }) };
+  return new Response(limited, { headers: response.headers });
+}
+
+function isHtml(response) {
+  return ["text/html", "application/xhtml+xml"].includes(contentType(response));
+}
+
+async function readHtml(url, hosts, origin) {
+  const { response, url: base } = await requestSource(
+    url, hosts, "text/html, application/xhtml+xml", AbortSignal.timeout(15000), origin,
+  );
+  if (!isHtml(response)) {
+    await response.body.cancel();
+    throw new RequestError("Informe o endereço de uma página HTML.");
+  }
+  return { base, html: boundedHtml(response) };
 }
 
 function coverUrl(element, base) {
@@ -188,6 +227,7 @@ function coverUrl(element, base) {
 async function catalog(url, hosts) {
   const { base, html } = await readHtml(url, hosts, url.origin);
   const titles = new Map();
+  const videos = new Map();
   let next = null;
   let anchor = null;
 
@@ -195,7 +235,7 @@ async function catalog(url, hosts) {
     if (!value) return null;
     try {
       const link = allowedUrl(htmlUrl(value), hosts, base);
-      return link.origin === base.origin ? link : null;
+      return sameCatalogHost(link, base.origin) ? link : null;
     } catch {
       return null;
     }
@@ -213,7 +253,7 @@ async function catalog(url, hosts) {
   function captureCover(element) {
     const link = anchor?.url;
     if (!link || link.href === base.href || (link.pathname === "/" && !link.search) ||
-      videoPath.test(link.pathname) || link.href === next) return;
+      videoPath.test(filename(link)) || link.href === next) return;
     const image = coverUrl(element, base);
     if (!image && element.tagName !== "img") return;
     const alt = element.getAttribute("alt")?.trim();
@@ -228,7 +268,7 @@ async function catalog(url, hosts) {
     });
   }
 
-  const parsed = new HTMLRewriter()
+  const rewriter = new HTMLRewriter()
     .on("link[rel][href]", { element: pagination })
     .on("a[href]", {
       element(element) {
@@ -243,16 +283,19 @@ async function catalog(url, hosts) {
     })
     .on("a[href] img, a[href] picture source, a[href] [style], a[href] [data-bg], a[href] [data-poster]", {
       element: captureCover,
-    })
-    .transform(html);
+    });
+  readVideoLinks(rewriter, videos, base, hosts);
+  const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
-  return { titulos: [...titles.values()], proxima: next };
+  const result = { titulos: [...titles.values()], proxima: next };
+  if (!result.titulos.length && videos.size) {
+    result.videos = [...videos.values()];
+    result.downloadDireto = !hosts.size;
+  }
+  return result;
 }
 
 async function serveCatalog(endpoint, url, hosts, context) {
-  if (url.hostname !== catalogHost) {
-    throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
-  }
   // Canonicalize the key so equivalent requests reuse the same catalog snapshot.
   const cacheUrl = new URL(endpoint.pathname, endpoint.origin);
   cacheUrl.searchParams.set("url", url.href);
@@ -282,7 +325,7 @@ async function serveCatalog(endpoint, url, hosts, context) {
   try {
     data = await catalog(url, hosts);
   } catch (error) {
-    if (snapshot && error instanceof RequestError && error.status === 503) {
+    if (snapshot && error instanceof RequestError && transientStatuses.has(error.status)) {
       return Response.json({ ...snapshot, desatualizado: true }, { headers });
     }
     throw error;
@@ -307,9 +350,13 @@ function buttonText(value) {
   return value.replace(/&nbsp;|&#160;|&#xA0;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
-function addMirrorReaders(rewriter, base, groups) {
+function canOpenMirror(url, hosts) {
+  return hosts.has(url.hostname) ||
+    (url.hostname === catalogHost && /^\/dl\/?$/.test(url.pathname));
+}
+
+function addMirrorReaders(rewriter, base, groups, hosts) {
   const headings = new Set();
-  const publicHosts = new Set();
   const unlabeledGroup = "Opções de download";
   let currentGroup = unlabeledGroup;
   let button = null;
@@ -368,7 +415,9 @@ function addMirrorReaders(rewriter, base, groups) {
             .find(Boolean)?.toUpperCase();
           if (!name) return;
           if (!groups.has(group)) groups.set(group, new Map());
-          groups.get(group).set(link.href, { nome: name, url: link.href });
+          const entry = { nome: name, url: link.href };
+          if (canOpenMirror(link, hosts)) entry.atalho = true;
+          groups.get(group).set(link.href, entry);
         });
       },
     })
@@ -389,9 +438,7 @@ function addMirrorReaders(rewriter, base, groups) {
     });
 }
 
-async function search(url, hosts, origin) {
-  const { base, html } = await readHtml(url, hosts, origin);
-  const videos = new Map();
+function readVideoLinks(rewriter, videos, base, hosts) {
   function collect(element, attribute) {
     const address = htmlUrl(element.getAttribute(attribute));
     if (!address || videos.size >= maxResults) return;
@@ -402,14 +449,26 @@ async function search(url, hosts, origin) {
       return;
     }
     const name = filename(link);
-    if (videoPath.test(name)) videos.set(link.href, { url: link.href, name });
+    const namedDownload = element.getAttribute("download")?.trim();
+    if (videoPath.test(name)) {
+      videos.set(link.href, { url: link.href, name });
+    } else if (!hosts.size && namedDownload && videoPath.test(namedDownload)) {
+      videos.set(link.href, { url: link.href, name: namedDownload });
+    }
   }
 
-  const rewriter = new HTMLRewriter()
+  rewriter
     .on("a[href]", { element: element => collect(element, "href") })
     .on("video[src], source[src]", { element: element => collect(element, "src") });
+}
+
+async function search(url, hosts, origin) {
+  const { base, html } = await readHtml(url, hosts, origin);
+  const videos = new Map();
+  const rewriter = new HTMLRewriter();
+  readVideoLinks(rewriter, videos, base, hosts);
   const groups = new Map();
-  if (origin) addMirrorReaders(rewriter, base, groups);
+  if (origin) addMirrorReaders(rewriter, base, groups, hosts);
   const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
   const opcoes = [...groups].map(([titulo, links]) => ({ titulo, links: [...links.values()] }));
@@ -418,13 +477,96 @@ async function search(url, hosts, origin) {
   });
 }
 
+function isVideoResponse(response) {
+  const type = contentType(response);
+  return type?.startsWith("video/") || ["application/octet-stream", "application/mp4"].includes(type);
+}
+
+async function publishedFile(page, provider, signal) {
+  const response = await fetch(page, { redirect: "manual", cache: "no-store", signal });
+  if (response.status !== 200 || !response.body || !isHtml(response) ||
+    response.headers.has("Set-Cookie")) {
+    await response.body?.cancel();
+    return null;
+  }
+  const files = new Map();
+  const parsed = new HTMLRewriter().on("a[download][href]", {
+    element(element) {
+      const address = htmlUrl(element.getAttribute("href"));
+      if (!address) return;
+      try {
+        const file = allowedUrl(address, publicHosts, page, { keepHash: true });
+        if (provider(file) && videoPath.test(filename(file))) files.set(file.href, file);
+      } catch {
+        // Ignore unsupported destinations.
+      }
+    },
+  }).transform(boundedHtml(response, 512 * 1024));
+  await parsed.body.pipeTo(new WritableStream());
+  return files.size === 1 ? files.values().next().value : null;
+}
+
+async function resolveMirror(url, hosts) {
+  const signal = AbortSignal.timeout(6000);
+  const visited = new Set();
+  const provider = candidate => candidate.origin === url.origin || hosts.has(candidate.hostname);
+  let current = url;
+
+  // Inspect public redirects and explicit file links without forwarding browser credentials.
+  for (let hops = 0; hops < 5 && current && !visited.has(current.href); hops++) {
+    visited.add(current.href);
+    const response = await fetch(current, {
+      method: "HEAD", redirect: "manual", cache: "no-store", signal,
+    });
+    if (response.headers.has("Set-Cookie")) return null;
+    const location = response.headers.get("Location");
+    if (redirects.has(response.status) && location) {
+      const next = allowedUrl(location, publicHosts, current, { keepHash: true });
+      if (!provider(next)) return null;
+      if (!location.includes("#")) next.hash = current.hash;
+      current = next;
+      continue;
+    }
+    if (response.status !== 200) return null;
+    const type = contentType(response);
+    const attachment = response.headers.get("Content-Disposition")
+      ?.match(/;\s*filename\*?\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+    const name = attachment?.[1] ?? attachment?.[2]?.trim() ?? "";
+    if (type?.startsWith("video/") || type === "application/mp4" ||
+      (type === "application/octet-stream" &&
+        (videoPath.test(filename(current)) || videoPath.test(name)))) {
+      return current;
+    }
+    if (!isHtml(response) || current.search || current.hash || current.hostname === catalogHost) {
+      return null;
+    }
+    current = await publishedFile(current, provider, signal);
+  }
+  return null;
+}
+
+async function openMirror(url, hosts) {
+  if (!canOpenMirror(url, hosts)) {
+    throw new RequestError("Este provedor não está habilitado para consulta de arquivos.", 403);
+  }
+  let file;
+  try {
+    file = await resolveMirror(url, hosts);
+  } catch {
+    // Let the original provider handle network failures, redirects and sessions.
+  }
+  return new Response(null, {
+    status: 302,
+    headers: { Location: (file ?? url).href, "Cache-Control": "no-store" },
+  });
+}
+
 async function download(url, hosts) {
   if (!videoPath.test(filename(url))) {
     throw new RequestError("Informe um link direto de vídeo.");
   }
   const { response } = await requestSource(url, hosts, "video/*, application/octet-stream");
-  const type = contentType(response);
-  if (!(type?.startsWith("video/") || ["application/octet-stream", "application/mp4"].includes(type))) {
+  if (!isVideoResponse(response)) {
     await response.body.cancel();
     throw new RequestError("A fonte não retornou um arquivo de vídeo.", 502);
   }
@@ -444,7 +586,7 @@ async function download(url, hosts) {
 export default {
   async fetch(request, env, context) {
     const endpoint = new URL(request.url);
-    if (!["/api/busca", "/api/baixar", "/api/catalogo"].includes(endpoint.pathname)) {
+    if (!["/api/busca", "/api/baixar", "/api/catalogo", "/api/abrir"].includes(endpoint.pathname)) {
       return Response.json({ erro: "Rota não encontrada." }, {
         status: 404,
         headers: { "Cache-Control": "no-store" },
@@ -465,16 +607,14 @@ export default {
       if (!value || value.length > 4096) {
         throw new RequestError("Informe o endereço da página ou do vídeo.");
       }
+      if (endpoint.pathname === "/api/abrir") {
+        const url = allowedUrl(value, publicHosts, undefined, { keepHash: true });
+        return await openMirror(url, hosts);
+      }
       const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
       if (endpoint.pathname === "/api/catalogo") return await serveCatalog(endpoint, url, hosts, context);
       if (endpoint.pathname === "/api/baixar") return await download(url, hosts);
-      let origin;
-      if (endpoint.searchParams.get("catalogo") === "1") {
-        if (url.hostname !== catalogHost) {
-          throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
-        }
-        origin = url.origin;
-      }
+      const origin = endpoint.searchParams.get("catalogo") === "1" ? url.origin : undefined;
       return await search(url, hosts, origin);
     } catch (error) {
       const failure = error instanceof RequestError
