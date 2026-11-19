@@ -47,3 +47,5 @@ O Worker serve a interface e processa a busca. A busca lê os links diretos do H
 Na interface web, **Varrer catálogo FilmesMP4** lista as capas seguindo a paginação marcada no HTML. Clique em uma capa para abrir uma página do Filmes Diretos que consulta os links daquele filme ou série. Quando houver um arquivo disponível para download pelo Worker, use **Baixar**. No modo aberto, o link leva ao arquivo na origem. **Parar varredura** interrompe a leitura do catálogo e preserva as capas já exibidas.
 
 Quando a página publicar botões MEGA, DAILY, FREEDL ou USERSD no HTML, eles aparecem agrupados pelos títulos das opções de download, como **480P DUBLADO**. Cada botão abre o endereço publicado em uma nova aba.
+
+O catálogo reaproveita por dois minutos as páginas carregadas com sucesso pelo Worker. Se a origem retornar HTTP 503, a última cópia disponível pode ser usada por até 24 horas, com um aviso na interface. Para uma indisponibilidade do próprio Worker, o navegador pode usar as páginas do catálogo carregadas recentemente. Os links de download são consultados ao abrir o título.

@@ -2,6 +2,8 @@ const videoPath = /\.(mp4|mkv|webm|mov|m4v|avi)$/i;
 const pageSize = 4 * 1024 * 1024;
 const maxResults = 100;
 const catalogHost = "filmesmp4.biz";
+const catalogFreshMs = 2 * 60 * 1000;
+const catalogRetentionSeconds = 24 * 60 * 60;
 
 class RequestError extends Error {
   constructor(message, status = 400, retryAfter = null) {
@@ -123,6 +125,11 @@ function contentType(response) {
   return response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
 }
 
+function htmlUrl(value) {
+  // HTMLRewriter may return the escaped separator. Leave percent-encoded values intact.
+  return value?.trim().replace(/&(?:amp|#0*38|#x0*26);/gi, "&");
+}
+
 function filename(url) {
   const segment = url.pathname.split("/").pop();
   try {
@@ -170,7 +177,7 @@ function coverUrl(element, base) {
   for (const candidate of candidates) {
     if (!candidate?.trim()) continue;
     try {
-      return allowedUrl(candidate.trim(), new Set(), base).href;
+      return allowedUrl(htmlUrl(candidate), new Set(), base).href;
     } catch {
       // Try the next candidate when a placeholder or a non-public URL is provided.
     }
@@ -179,9 +186,6 @@ function coverUrl(element, base) {
 }
 
 async function catalog(url, hosts) {
-  if (url.hostname !== catalogHost) {
-    throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
-  }
   const { base, html } = await readHtml(url, hosts, url.origin);
   const titles = new Map();
   let next = null;
@@ -190,7 +194,7 @@ async function catalog(url, hosts) {
   function catalogLink(value) {
     if (!value) return null;
     try {
-      const link = allowedUrl(value, hosts, base);
+      const link = allowedUrl(htmlUrl(value), hosts, base);
       return link.origin === base.origin ? link : null;
     } catch {
       return null;
@@ -242,9 +246,58 @@ async function catalog(url, hosts) {
     })
     .transform(html);
   await parsed.body.pipeTo(new WritableStream());
-  return Response.json({ titulos: [...titles.values()], proxima: next }, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  return { titulos: [...titles.values()], proxima: next };
+}
+
+async function serveCatalog(endpoint, url, hosts, context) {
+  if (url.hostname !== catalogHost) {
+    throw new RequestError("Informe uma página do catálogo FilmesMP4.", 403);
+  }
+  // Canonicalize the key so equivalent requests reuse the same catalog snapshot.
+  const cacheUrl = new URL(endpoint.pathname, endpoint.origin);
+  cacheUrl.searchParams.set("url", url.href);
+  const cacheKey = new Request(cacheUrl);
+  const headers = { "Cache-Control": "no-store" };
+  let snapshot;
+  let savedAt;
+  try {
+    const cached = await caches.default.match(cacheKey);
+    if (cached) {
+      savedAt = Number(cached.headers.get("X-Catalog-Saved-At"));
+      const age = Date.now() - savedAt;
+      if (age >= 0 && age < catalogRetentionSeconds * 1000) {
+        const data = await cached.json();
+        if (Array.isArray(data?.titulos) && data.titulos.length) snapshot = data;
+      }
+    }
+  } catch {
+    // A cache failure is recoverable by reading the source.
+  }
+
+  if (snapshot && Date.now() - savedAt < catalogFreshMs) {
+    return Response.json(snapshot, { headers });
+  }
+
+  let data;
+  try {
+    data = await catalog(url, hosts);
+  } catch (error) {
+    if (snapshot && error instanceof RequestError && error.status === 503) {
+      return Response.json({ ...snapshot, desatualizado: true }, { headers });
+    }
+    throw error;
+  }
+
+  if (data.titulos.length) {
+    const cached = Response.json(data, {
+      headers: {
+        "Cache-Control": `public, max-age=${catalogRetentionSeconds}`,
+        "X-Catalog-Saved-At": String(Date.now()),
+      },
+    });
+    context.waitUntil(caches.default.put(cacheKey, cached).catch(() => {}));
+  }
+  return Response.json(data, { headers });
 }
 
 const mirrorButton = /^(?:baixar\s+(?:(?:em|no|na|por|pelo|pela)\s+)?|download\s+)?(mega|daily|freedl|usersd)$/i;
@@ -290,7 +343,7 @@ function addMirrorReaders(rewriter, base, groups) {
 
         let link;
         for (const attribute of ["href", "data-href", "data-url"]) {
-          const address = element.getAttribute(attribute)?.trim();
+          const address = htmlUrl(element.getAttribute(attribute));
           if (!address || address.startsWith("#")) continue;
           try {
             const candidate = allowedUrl(address, publicHosts, base, { keepHash: true });
@@ -340,7 +393,7 @@ async function search(url, hosts, origin) {
   const { base, html } = await readHtml(url, hosts, origin);
   const videos = new Map();
   function collect(element, attribute) {
-    const address = element.getAttribute(attribute)?.trim();
+    const address = htmlUrl(element.getAttribute(attribute));
     if (!address || videos.size >= maxResults) return;
     let link;
     try {
@@ -389,7 +442,7 @@ async function download(url, hosts) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     const endpoint = new URL(request.url);
     if (!["/api/busca", "/api/baixar", "/api/catalogo"].includes(endpoint.pathname)) {
       return Response.json({ erro: "Rota não encontrada." }, {
@@ -413,7 +466,7 @@ export default {
         throw new RequestError("Informe o endereço da página ou do vídeo.");
       }
       const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
-      if (endpoint.pathname === "/api/catalogo") return await catalog(url, hosts);
+      if (endpoint.pathname === "/api/catalogo") return await serveCatalog(endpoint, url, hosts, context);
       if (endpoint.pathname === "/api/baixar") return await download(url, hosts);
       let origin;
       if (endpoint.searchParams.get("catalogo") === "1") {

@@ -106,10 +106,17 @@ scanButton.addEventListener("click", async () => {
   const pages = new Set();
   const titles = new Set();
   let page = "https://filmesmp4.biz/";
+  let usedCache = false;
+  function showCatalogStatus(message) {
+    status.textContent = usedCache
+      ? `${message} A varredura inclui páginas de uma cópia salva.`
+      : message;
+  }
   try {
     while (page && !pages.has(page)) {
       pages.add(page);
       const catalog = await query("catalogo", { url: page }, signal);
+      usedCache ||= catalog.desatualizado === true;
       for (const title of catalog.titulos) {
         if (titles.has(title.url)) continue;
         titles.add(title.url);
@@ -117,16 +124,19 @@ scanButton.addEventListener("click", async () => {
       }
       page = catalog.proxima;
       if (page && !pages.has(page)) {
-        status.textContent = `${titles.size} título(s) no catálogo. Buscando mais capas…`;
+        showCatalogStatus(`${titles.size} título(s) no catálogo. Buscando mais capas…`);
       }
     }
-    status.textContent = titles.size
+    showCatalogStatus(titles.size
       ? "Escolha uma capa para ver as opções de download."
-      : "Nenhuma capa com link foi encontrada nas páginas do catálogo.";
+      : "Nenhuma capa com link foi encontrada nas páginas do catálogo.");
   } catch (error) {
-    status.textContent = signal.aborted
-      ? `Varredura interrompida. ${titles.size} capa(s) listada(s).`
-      : `Falha ao carregar o catálogo. ${error.message}`;
+    if (signal.aborted) {
+      showCatalogStatus(`Varredura interrompida. ${titles.size} capa(s) listada(s).`);
+    } else {
+      const partial = titles.size ? " As capas já exibidas foram mantidas." : "";
+      showCatalogStatus(`Falha ao carregar o catálogo. ${error.message}${partial}`);
+    }
   } finally {
     scanButton.disabled = button.disabled = false;
     stopButton.hidden = true;

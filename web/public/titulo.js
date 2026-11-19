@@ -100,9 +100,13 @@ function showDownloads({ videos, downloadDireto, opcoes }) {
 }
 
 const source = publicHttps(parameters.get("url"));
-if (!source) {
+if (source?.hostname !== "filmesmp4.biz") {
   status.textContent = "Abra um filme ou série a partir do catálogo para buscar as opções de download.";
 } else {
+  const original = document.querySelector("#origem-titulo");
+  setExternalLink(original.querySelector("a"), source);
+  original.hidden = false;
+
   const title = parameters.get("titulo")?.trim();
   if (title) {
     heading.textContent = title;
