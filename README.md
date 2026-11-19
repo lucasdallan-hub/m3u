@@ -45,3 +45,5 @@ O Worker serve a interface e processa a busca. A busca lê os links diretos do H
 ### Varredura do catálogo FilmesMP4
 
 Na interface web, **Varrer catálogo FilmesMP4** lista as capas seguindo a paginação marcada no HTML. Clique em uma capa para abrir uma página do Filmes Diretos que consulta os links daquele filme ou série. Quando houver um arquivo disponível para download pelo Worker, use **Baixar**. No modo aberto, o link leva ao arquivo na origem. **Parar varredura** interrompe a leitura do catálogo e preserva as capas já exibidas.
+
+Quando a página publicar botões MEGA, DAILY, FREEDL ou USERSD no HTML, eles aparecem agrupados pelos títulos das opções de download, como **480P DUBLADO**. Cada botão abre o endereço publicado em uma nova aba.

@@ -29,7 +29,45 @@ async function getDownloads(source) {
   return data;
 }
 
-function showDownloads({ videos, downloadDireto }) {
+function setExternalLink(link, url) {
+  link.href = url.href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+}
+
+function showOptions(options) {
+  let count = 0;
+  for (const option of options) {
+    if (typeof option?.titulo !== "string" || !Array.isArray(option.links)) continue;
+    const title = option.titulo.trim();
+    if (!title) continue;
+    const links = document.createElement("ul");
+    for (const item of option.links) {
+      const url = publicHttps(item?.url);
+      const name = typeof item?.nome === "string" ? item.nome.trim() : "";
+      if (!url || !name) continue;
+      const link = document.createElement("a");
+      link.textContent = name;
+      setExternalLink(link, url);
+      const row = document.createElement("li");
+      row.append(link);
+      links.append(row);
+    }
+    if (!links.childElementCount) continue;
+    const group = document.createElement("li");
+    group.className = "download-grupo";
+    const label = document.createElement("h2");
+    label.textContent = title;
+    group.append(label, links);
+    downloads.append(group);
+    count += links.childElementCount;
+  }
+  return count;
+}
+
+function showDownloads({ videos, downloadDireto, opcoes }) {
+  const optionsCount = Array.isArray(opcoes) ? showOptions(opcoes) : 0;
+  let videosCount = 0;
   for (const video of videos) {
     const url = publicHttps(video?.url);
     if (!url || typeof video.name !== "string") continue;
@@ -39,9 +77,7 @@ function showDownloads({ videos, downloadDireto }) {
     name.textContent = video.name;
     if (downloadDireto) {
       link.textContent = "Abrir arquivo";
-      link.href = url.href;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+      setExternalLink(link, url);
     } else {
       link.textContent = "Baixar";
       link.href = `/api/baixar?${new URLSearchParams({ url: url.href })}`;
@@ -50,12 +86,13 @@ function showDownloads({ videos, downloadDireto }) {
     link.setAttribute("aria-label", `${link.textContent} ${video.name}`);
     row.append(name, link);
     downloads.append(row);
+    videosCount++;
   }
 
-  const count = downloads.childElementCount;
+  const count = optionsCount + videosCount;
   if (!count) {
     status.textContent = "Nenhum link direto para download foi encontrado nesta página.";
-  } else if (downloadDireto) {
+  } else if (downloadDireto && !optionsCount) {
     status.textContent = "Abra um arquivo para baixar ou reproduzir, conforme o site de origem.";
   } else {
     status.textContent = count === 1 ? "1 opção de download" : `${count} opções de download`;

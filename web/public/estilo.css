@@ -85,6 +85,11 @@ main:has(.grade-catalogo) { width: min(100% - 2rem, 72rem); }
 }
 .detalhe-conteudo { min-width: 0; overflow-wrap: anywhere; }
 .detalhe-conteudo li { flex-wrap: wrap; }
+.download-grupo { display: grid; justify-content: stretch; gap: .65rem; padding: .9rem; }
+.download-grupo h2 { margin: 0; font-size: 1rem; }
+.download-grupo ul { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; }
+.download-grupo ul li { padding: 0; border: 0; background: transparent; }
+.download-grupo a { padding: .5rem .75rem; font-size: .9rem; }
 
 @media (min-width: 44rem) {
   .pagina-titulo:has(.detalhe-capa:not([hidden])) {

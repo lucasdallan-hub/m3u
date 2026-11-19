@@ -10,7 +10,7 @@ class RequestError extends Error {
   }
 }
 
-function allowedUrl(value, hosts, base) {
+function allowedUrl(value, hosts, base, { keepHash = false } = {}) {
   let url;
   try {
     url = new URL(value, base);
@@ -23,7 +23,7 @@ function allowedUrl(value, hosts, base) {
   ) {
     throw new RequestError("Use um endereço HTTPS público permitido pela configuração.", 403);
   }
-  url.hash = "";
+  if (!keepHash) url.hash = "";
   return url;
 }
 
@@ -231,6 +231,95 @@ async function catalog(url, hosts) {
   });
 }
 
+const mirrorButton = /^(?:baixar\s+(?:(?:em|no|na|por|pelo|pela)\s+)?|download\s+)?(mega|daily|freedl|usersd)$/i;
+const downloadHeading = /^(?:baixar|downloads?)\s+.+$/i;
+
+function buttonText(value) {
+  return value.replace(/&nbsp;|&#160;|&#xA0;/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+function addMirrorReaders(rewriter, base, groups) {
+  const headings = new Set();
+  const publicHosts = new Set();
+  const unlabeledGroup = "Opções de download";
+  let currentGroup = unlabeledGroup;
+  let button = null;
+
+  function headingTitle(text) {
+    const title = buttonText(text);
+    if (!downloadHeading.test(title) || mirrorButton.test(title)) return null;
+    return title;
+  }
+
+  rewriter
+    .on('h1, h2, h3, h4, h5, h6, p, strong, b, legend, span, div[class*="download"]', {
+      element(element) {
+        if (button) return;
+        const heading = { text: "", hasButton: false };
+        headings.add(heading);
+        element.onEndTag(() => {
+          headings.delete(heading);
+          if (!heading.hasButton) currentGroup = headingTitle(heading.text) || currentGroup;
+        });
+      },
+    })
+    .on("a[href], a[data-href], a[data-url], button[data-href], button[data-url]", {
+      element(element) {
+        let group = currentGroup;
+        for (const heading of headings) {
+          if (!heading.hasButton) group = headingTitle(heading.text) || group;
+          heading.hasButton = true;
+        }
+        currentGroup = group;
+
+        let link;
+        for (const attribute of ["href", "data-href", "data-url"]) {
+          const address = element.getAttribute(attribute)?.trim();
+          if (!address || address.startsWith("#")) continue;
+          try {
+            const candidate = allowedUrl(address, publicHosts, base, { keepHash: true });
+            if (candidate.href === base.href) continue;
+            link = candidate;
+            break;
+          } catch {
+            // Try the next static link attribute.
+          }
+        }
+        if (!link) return;
+
+        const capture = {
+          text: "",
+          labels: [element.getAttribute("aria-label"), element.getAttribute("title")],
+        };
+        button = capture;
+        element.onEndTag(() => {
+          button = null;
+          const name = [capture.text, ...capture.labels]
+            .map(label => mirrorButton.exec(buttonText(label ?? ""))?.[1])
+            .find(Boolean)?.toUpperCase();
+          if (!name) return;
+          if (!groups.has(group)) groups.set(group, new Map());
+          groups.get(group).set(link.href, { nome: name, url: link.href });
+        });
+      },
+    })
+    .on("a img, button img", {
+      element(element) {
+        if (button) button.labels.push(element.getAttribute("alt"));
+      },
+    })
+    .onDocument({
+      text(text) {
+        if (button && button.text.length < 160) button.text += text.text.slice(0, 160);
+        for (const heading of headings) {
+          if (!heading.hasButton && heading.text.length < 160) {
+            heading.text += text.text.slice(0, 160);
+          }
+        }
+      },
+    });
+}
+
 async function search(url, hosts, origin) {
   const { base, html } = await readHtml(url, hosts, origin);
   const videos = new Map();
@@ -247,12 +336,15 @@ async function search(url, hosts, origin) {
     if (videoPath.test(name)) videos.set(link.href, { url: link.href, name });
   }
 
-  const parsed = new HTMLRewriter()
+  const rewriter = new HTMLRewriter()
     .on("a[href]", { element: element => collect(element, "href") })
-    .on("video[src], source[src]", { element: element => collect(element, "src") })
-    .transform(html);
+    .on("video[src], source[src]", { element: element => collect(element, "src") });
+  const groups = new Map();
+  if (origin) addMirrorReaders(rewriter, base, groups);
+  const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
-  return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size }, {
+  const opcoes = [...groups].map(([titulo, links]) => ({ titulo, links: [...links.values()] }));
+  return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size, ...(origin ? { opcoes } : {}) }, {
     headers: { "Cache-Control": "no-store" },
   });
 }
