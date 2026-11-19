@@ -1,7 +1,7 @@
-const catalogRetryBudgetMs = 15_000;
-const catalogRetryDelaysMs = [1_200, 3_500, 7_500];
+const retryBudgetMs = 15_000;
+const retryDelaysMs = [1_200, 3_500, 7_500];
 const rateLimitRetryBudgetMs = 3_000;
-const catalogTransientStatuses = new Set([429, 502, 503, 504]);
+const transientStatuses = new Set([429, 502, 503, 504]);
 const catalogCacheKey = "filmes-diretos:catalogo:v1";
 const catalogCacheMaxAgeMs = 24 * 60 * 60 * 1000;
 const catalogCacheMaxPages = 16;
@@ -92,19 +92,21 @@ function waitForRetry(delay, signal) {
   });
 }
 
-function catalogUnavailableMessage(response) {
+function unavailableMessageFor(response, catalog) {
   if (response.status === 503 && !response.headers.has("X-Filmes-Diretos")) {
     const ray = response.headers.get("CF-Ray");
     const reference = ray ? ` Referência Cloudflare ${ray}.` : "";
     return `A hospedagem devolveu HTTP 503 sem identificar a API do Filmes Diretos.${reference}`;
   }
-  return `O serviço do catálogo está temporariamente indisponível (HTTP ${response.status}).`;
+  const service = catalog ? "do catálogo" : "de busca de downloads";
+  return `O serviço ${service} está temporariamente indisponível (HTTP ${response.status}).`;
 }
 
 export async function query(endpoint, parameters, signal, { paginaInicial = false } = {}) {
   const search = new URLSearchParams(parameters);
   const url = `/api/${endpoint}?${search}`;
   const catalogUrl = endpoint === "catalogo" ? search.get("url") : null;
+  const retryable = Boolean(catalogUrl) || (endpoint === "busca" && search.get("catalogo") === "1");
   const options = {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -114,19 +116,19 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
   try {
     signal?.throwIfAborted();
     response = await fetch(url, options);
-    let remainingWait = catalogRetryBudgetMs;
-    for (let attempt = 0; catalogUrl && catalogTransientStatuses.has(response.status); attempt++) {
+    let remainingWait = retryBudgetMs;
+    for (let attempt = 0; retryable && transientStatuses.has(response.status); attempt++) {
       signal?.throwIfAborted();
-      const saved = cachedCatalogPage(catalogUrl);
+      const saved = catalogUrl && cachedCatalogPage(catalogUrl);
       if (saved) {
         await response.body?.cancel();
         signal?.throwIfAborted();
         return saved;
       }
       const rateLimited = response.status === 429;
-      const retries = rateLimited ? 1 : catalogRetryDelaysMs.length;
+      const retries = rateLimited ? 1 : retryDelaysMs.length;
       if (attempt >= retries) break;
-      const delay = retryDelay(response, rateLimited ? 1_000 : catalogRetryDelaysMs[attempt]);
+      const delay = retryDelay(response, rateLimited ? 1_000 : retryDelaysMs[attempt]);
       const budget = rateLimited ? Math.min(rateLimitRetryBudgetMs, remainingWait) : remainingWait;
       if (delay > budget) break;
       await response.body?.cancel();
@@ -137,14 +139,15 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
     }
   } catch (error) {
     signal?.throwIfAborted();
-    if (!catalogUrl || !(error instanceof TypeError)) throw error;
-    const saved = cachedCatalogPage(catalogUrl);
+    if (!retryable || !(error instanceof TypeError)) throw error;
+    const saved = catalogUrl && cachedCatalogPage(catalogUrl);
     if (saved) return saved;
-    throw new Error("Não foi possível conectar ao serviço do catálogo.", { cause: error });
+    const service = catalogUrl ? "do catálogo" : "de busca de downloads";
+    throw new Error(`Não foi possível conectar ao serviço ${service}.`, { cause: error });
   }
 
-  const unavailableMessage = catalogUrl && catalogTransientStatuses.has(response.status)
-    ? catalogUnavailableMessage(response)
+  const unavailableMessage = retryable && transientStatuses.has(response.status)
+    ? unavailableMessageFor(response, Boolean(catalogUrl))
     : null;
   const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {

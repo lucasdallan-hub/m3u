@@ -4,6 +4,7 @@ import { addMediaLinks, magnetUrl, publicHttps, viewerUrl } from "./midia.js";
 const parameters = new URLSearchParams(location.search);
 const heading = document.querySelector("#nome-titulo");
 const status = document.querySelector("#estado-titulo");
+const retry = document.querySelector("#tentar-downloads");
 const downloads = document.querySelector("#downloads");
 const cover = document.querySelector("#capa-titulo");
 
@@ -107,9 +108,16 @@ if (!source) {
     cover.addEventListener("load", () => { cover.parentElement.hidden = false; }, { once: true });
     cover.src = image.href;
   }
-  try {
-    showDownloads(await getDownloads(source));
-  } catch (error) {
-    status.textContent = `Não foi possível buscar as opções de download. ${error.message}`;
+  async function loadDownloads() {
+    retry.hidden = true;
+    status.textContent = "Procurando opções de download…";
+    try {
+      showDownloads(await getDownloads(source));
+    } catch (error) {
+      status.textContent = `Não foi possível buscar as opções de download. ${error.message}`;
+      retry.hidden = false;
+    }
   }
+  retry.addEventListener("click", loadDownloads);
+  await loadDownloads();
 }
