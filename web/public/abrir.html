@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121215">
+  <meta name="referrer" content="no-referrer">
+  <title>Abrir conteúdo | Filmes Diretos</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <script src="/abrir.js" type="module"></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Filmes <strong>Diretos</strong></span>
+      </a>
+    </div>
+  </header>
+  <main class="shell pagina-abrir">
+    <nav class="detalhe-nav" aria-label="Navegação">
+      <a class="detalhe-voltar" href="/"><span aria-hidden="true">←</span> Voltar</a>
+    </nav>
+    <section class="abrir-painel" aria-labelledby="abrir-titulo">
+      <h1 id="abrir-titulo">Abrir conteúdo</h1>
+      <p class="abrir-provedor" hidden>Provedor <strong id="abrir-provedor"></strong></p>
+      <div class="abrir-midia" hidden>
+        <video class="abrir-player" id="abrir-player" controls playsinline preload="none" hidden></video>
+        <iframe class="abrir-frame" id="abrir-frame" title="Página do provedor"
+          sandbox="allow-forms allow-scripts allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+      </div>
+      <p class="abrir-status" id="abrir-status" role="status"></p>
+      <a class="abrir-externo" href="/" rel="noreferrer" referrerpolicy="no-referrer" hidden>Abrir na mesma aba</a>
+    </section>
+  </main>
+</body>
+</html>

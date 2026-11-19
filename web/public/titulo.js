@@ -1,5 +1,5 @@
 import { query } from "./api.js";
-import { addMediaLinks, magnetUrl, publicHttps } from "./midia.js";
+import { addMediaLinks, magnetUrl, publicHttps, viewerUrl } from "./midia.js";
 
 const parameters = new URLSearchParams(location.search);
 const heading = document.querySelector("#nome-titulo");
@@ -13,12 +13,6 @@ async function getDownloads(source) {
     throw new Error("A API devolveu uma resposta sem opções de download válidas.");
   }
   return data;
-}
-
-function setNewTabLink(link, href) {
-  link.href = href;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
 }
 
 function mediaAddress(item) {
@@ -46,10 +40,7 @@ function showOptions(options, downloadDireto, directLinks, groupedLinks) {
         link.download = "";
         link.setAttribute("aria-label", `Baixar arquivo .torrent ${name}`);
       } else {
-        const href = item.tipo !== "torrent" && item.atalho === true
-          ? `/api/abrir?${new URLSearchParams({ url: url.href })}`
-          : url.href;
-        setNewTabLink(link, href);
+        link.href = viewerUrl(url, { atalho: item.tipo !== "torrent" && item.atalho === true });
       }
       const row = document.createElement("li");
       row.append(link);
@@ -103,7 +94,7 @@ if (!source) {
   const original = document.querySelector("#origem-titulo");
   const originalLink = original.querySelector("a");
   originalLink.textContent = `Abrir página original em ${source.hostname}`;
-  setNewTabLink(originalLink, source.href);
+  originalLink.href = viewerUrl(source);
   original.hidden = false;
 
   const title = parameters.get("titulo")?.trim();

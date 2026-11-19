@@ -28,6 +28,12 @@ export function magnetUrl(value) {
   return null;
 }
 
+export function viewerUrl(url, { modo = "pagina", atalho = false } = {}) {
+  const parameters = new URLSearchParams({ url: url.href, modo });
+  if (atalho) parameters.set("atalho", "1");
+  return `/abrir.html?${parameters}`;
+}
+
 export function addMediaLinks(list, videos, downloadDireto) {
   const links = [];
   for (const video of videos) {
@@ -45,9 +51,7 @@ export function addMediaLinks(list, videos, downloadDireto) {
       link.href = url.href;
     } else if (downloadDireto) {
       link.textContent = torrent ? "Abrir arquivo .torrent" : "Abrir vídeo";
-      link.href = url.href;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
+      link.href = viewerUrl(url, { modo: torrent ? "pagina" : "video" });
     } else {
       link.textContent = torrent ? "Baixar .torrent" : "Baixar";
       link.href = `/api/baixar?${new URLSearchParams({ url: url.href })}`;
