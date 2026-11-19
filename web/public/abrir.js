@@ -1,4 +1,4 @@
-import { publicHttps } from "./midia.js";
+import { providerUrl, publicHttps, requiresSameTab } from "./midia.js";
 
 const parameters = new URLSearchParams(location.search);
 const source = publicHttps(parameters.get("url"));
@@ -29,9 +29,7 @@ if (!source || !["video", "pagina"].includes(mode)) {
   provider.textContent = source.hostname;
   provider.parentElement.hidden = false;
 
-  const address = mode === "pagina" && parameters.get("atalho") === "1"
-    ? `/api/abrir?${new URLSearchParams({ url: source.href })}`
-    : source.href;
+  const address = providerUrl(source, mode === "pagina" && parameters.get("atalho") === "1");
   fallback.href = address;
   fallback.hidden = false;
 
@@ -44,13 +42,16 @@ if (!source || !["video", "pagina"].includes(mode)) {
     player.hidden = false;
     document.querySelector("#abrir-titulo").textContent = "Assistir ao vídeo";
     document.title = "Assistir ao vídeo | Filmes Diretos";
+    player.parentElement.hidden = false;
+  } else if (requiresSameTab(source)) {
+    status.textContent = "Use Abrir na mesma aba para continuar na página do provedor.";
   } else {
     const frame = document.querySelector("#abrir-frame");
     frame.addEventListener("load", () => { frameLoads++; });
     frame.src = address;
     frame.hidden = false;
+    frame.parentElement.hidden = false;
     document.querySelector("#abrir-titulo").textContent = "Página do provedor";
     status.textContent = "Se o provedor bloquear a exibição aqui, use Abrir na mesma aba.";
   }
-  document.querySelector(".abrir-midia").hidden = false;
 }

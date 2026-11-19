@@ -28,7 +28,17 @@ export function magnetUrl(value) {
   return null;
 }
 
+export function requiresSameTab(url) {
+  return url.hostname === "shrinkme.click" || url.hostname.endsWith(".shrinkme.click") ||
+    (url.hostname === "filmesmp4.biz" && /^\/dl\/?$/.test(url.pathname));
+}
+
+export function providerUrl(url, atalho) {
+  return atalho ? `/api/abrir?${new URLSearchParams({ url: url.href })}` : url.href;
+}
+
 export function viewerUrl(url, { modo = "pagina", atalho = false } = {}) {
+  if (modo === "pagina" && requiresSameTab(url)) return providerUrl(url, atalho);
   const parameters = new URLSearchParams({ url: url.href, modo });
   if (atalho) parameters.set("atalho", "1");
   return `/abrir.html?${parameters}`;

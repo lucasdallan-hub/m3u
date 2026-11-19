@@ -699,7 +699,7 @@ export default {
       const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
       if (endpoint.pathname === "/api/catalogo") return await serveCatalog(endpoint, url, hosts, context);
       if (endpoint.pathname === "/api/baixar") return await download(url, hosts);
-      if (torrentPath.test(filename(url))) {
+      if (isMediaFile(filename(url))) {
         return Response.json({ videos: [mediaFile(url, filename(url))], downloadDireto: !hosts.size }, {
           headers: apiHeaders,
         });
