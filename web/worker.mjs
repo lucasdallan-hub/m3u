@@ -4,9 +4,10 @@ const maxResults = 100;
 const catalogHost = "filmesmp4.biz";
 
 class RequestError extends Error {
-  constructor(message, status = 400) {
+  constructor(message, status = 400, retryAfter = null) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -61,6 +62,14 @@ async function checkPublicDns(hostname, signal) {
       signal,
     });
     if (!response.ok) {
+      await response.body?.cancel();
+      if (response.status === 503) {
+        throw new RequestError(
+          "O serviço de DNS está temporariamente indisponível (HTTP 503).",
+          503,
+          response.headers.get("Retry-After"),
+        );
+      }
       throw new RequestError("Não foi possível validar o domínio da fonte.", 502);
     }
     const answer = await response.json();
@@ -97,6 +106,13 @@ async function requestSource(url, hosts, accept, signal, origin) {
     }
     if (response.status !== 200 || !response.body) {
       await response.body?.cancel();
+      if (response.status === 503) {
+        throw new RequestError(
+          "O site de origem está temporariamente indisponível (HTTP 503).",
+          503,
+          response.headers.get("Retry-After"),
+        );
+      }
       throw new RequestError(`A fonte respondeu com HTTP ${response.status}.`, 502);
     }
     return { response, url };
@@ -408,12 +424,12 @@ export default {
       }
       return await search(url, hosts, origin);
     } catch (error) {
-      return Response.json({
-        erro: error instanceof RequestError ? error.message : "Não foi possível consultar a fonte.",
-      }, {
-        status: error instanceof RequestError ? error.status : 502,
-        headers: { "Cache-Control": "no-store" },
-      });
+      const failure = error instanceof RequestError
+        ? error
+        : new RequestError("Não foi possível consultar a fonte.", 502);
+      const headers = new Headers({ "Cache-Control": "no-store" });
+      if (failure.retryAfter) headers.set("Retry-After", failure.retryAfter);
+      return Response.json({ erro: failure.message }, { status: failure.status, headers });
     }
   },
 };
