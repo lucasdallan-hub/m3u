@@ -284,7 +284,10 @@ export default {
   async fetch(request, env) {
     const endpoint = new URL(request.url);
     if (!["/api/busca", "/api/baixar", "/api/catalogo"].includes(endpoint.pathname)) {
-      return new Response("Página não encontrada.", { status: 404 });
+      return Response.json({ erro: "Rota não encontrada." }, {
+        status: 404,
+        headers: { "Cache-Control": "no-store" },
+      });
     }
     if (request.method !== "GET") {
       return new Response(null, { status: 405, headers: { Allow: "GET" } });
