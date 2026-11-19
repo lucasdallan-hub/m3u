@@ -3,24 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121215">
   <title>Opções de download | Filmes Diretos</title>
   <link rel="stylesheet" href="/estilo.css">
   <script src="/titulo.js" type="module"></script>
 </head>
 <body>
-  <main class="pagina-titulo">
-    <nav aria-label="Catálogo">
-      <a class="detalhe-voltar" href="/">Voltar ao catálogo</a>
-    </nav>
-    <div class="detalhe-capa" hidden>
-      <img id="capa-titulo" alt="" referrerpolicy="no-referrer" decoding="async">
+  <header class="site-header">
+    <div class="shell site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Filmes <strong>Diretos</strong></span>
+      </a>
     </div>
-    <section class="detalhe-conteudo" aria-labelledby="nome-titulo">
-      <h1 id="nome-titulo">Opções de download</h1>
-      <p id="estado-titulo" role="status">Procurando opções de download…</p>
-      <ul id="downloads"></ul>
-      <p id="origem-titulo" hidden><a>Abrir página original do título</a></p>
-    </section>
+  </header>
+  <main class="shell pagina-titulo">
+    <nav class="detalhe-nav" aria-label="Catálogo">
+      <a class="detalhe-voltar" href="/"><span aria-hidden="true">←</span> Voltar ao catálogo</a>
+    </nav>
+    <div class="detalhe-layout">
+      <div class="detalhe-capa" hidden>
+        <img id="capa-titulo" alt="" referrerpolicy="no-referrer" decoding="async">
+      </div>
+      <section class="detalhe-conteudo" aria-labelledby="nome-titulo">
+        <h1 id="nome-titulo">Opções de download</h1>
+        <div class="detalhe-downloads">
+          <p id="estado-titulo" role="status">Procurando opções de download…</p>
+          <ul id="downloads"></ul>
+        </div>
+        <p id="origem-titulo" hidden><a>Abrir página original do título</a></p>
+      </section>
+    </div>
   </main>
 </body>
 </html>

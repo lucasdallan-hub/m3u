@@ -1,25 +1,11 @@
 import { query } from "./api.js";
+import { addMediaLinks, publicHttps } from "./midia.js";
 
 const parameters = new URLSearchParams(location.search);
 const heading = document.querySelector("#nome-titulo");
 const status = document.querySelector("#estado-titulo");
 const downloads = document.querySelector("#downloads");
 const cover = document.querySelector("#capa-titulo");
-
-function publicHttps(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (url.protocol === "https:" && !url.username && !url.password && !url.port &&
-      /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$/.test(url.hostname) &&
-      !/\.(?:localhost|local|internal|lan|onion|test|invalid|example|home\.arpa)$/.test(url.hostname)) {
-      return url;
-    }
-  } catch {
-    // Ignore malformed addresses passed in the URL parameters.
-  }
-  return null;
-}
 
 async function getDownloads(source) {
   const data = await query("busca", { url: source.href, catalogo: "1" });
@@ -70,32 +56,12 @@ function showOptions(options) {
 
 function showDownloads({ videos, downloadDireto, opcoes }) {
   const optionsCount = Array.isArray(opcoes) ? showOptions(opcoes) : 0;
-  let videosCount = 0;
-  for (const video of videos) {
-    const url = publicHttps(video?.url);
-    if (!url || typeof video.name !== "string") continue;
-    const row = document.createElement("li");
-    const name = document.createElement("span");
-    const link = document.createElement("a");
-    name.textContent = video.name;
-    if (downloadDireto) {
-      link.textContent = "Abrir arquivo";
-      setNewTabLink(link, url.href);
-    } else {
-      link.textContent = "Baixar";
-      link.href = `/api/baixar?${new URLSearchParams({ url: url.href })}`;
-      link.download = "";
-    }
-    link.setAttribute("aria-label", `${link.textContent} ${video.name}`);
-    row.append(name, link);
-    downloads.append(row);
-    videosCount++;
-  }
+  const links = addMediaLinks(downloads, videos, downloadDireto);
 
-  const count = optionsCount + videosCount;
+  const count = optionsCount + links.length;
   if (!count) {
     status.textContent = "Nenhum link direto para download foi encontrado nesta página.";
-  } else if (downloadDireto && !optionsCount) {
+  } else if (downloadDireto && !optionsCount && links.every(({ tipo }) => tipo !== "magnet" && tipo !== "torrent")) {
     status.textContent = "Abra um arquivo para baixar ou reproduzir, conforme o site de origem.";
   } else {
     status.textContent = count === 1 ? "1 opção de download" : `${count} opções de download`;

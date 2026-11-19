@@ -3,30 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121215">
   <title>Filmes Diretos</title>
   <link rel="stylesheet" href="/estilo.css">
   <script src="/app.js" type="module"></script>
 </head>
 <body>
-  <main>
-    <header>
-      <h1>Filmes Diretos</h1>
-      <p>Encontre vídeos disponíveis para download em páginas autorizadas.</p>
-    </header>
-    <form id="busca">
-      <label for="url">Endereço da página</label>
-      <div class="campo">
-        <input id="url" type="text" inputmode="url" placeholder="https://catalogo.exemplo.org/filmes" required maxlength="4096">
-        <button type="submit">Buscar vídeos</button>
-        <button id="varrer" type="submit">Varrer catálogo</button>
-      </div>
-      <label class="opcao"><input id="automatico" type="checkbox"> Baixar automaticamente quando houver um único resultado</label>
-    </form>
-    <div class="catalogo">
-      <button id="usar-filmesmp4" type="button">Varrer FilmesMP4</button>
-      <button id="parar" type="button" hidden>Parar varredura</button>
+  <header class="site-header">
+    <div class="shell site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Filmes <strong>Diretos</strong></span>
+      </a>
+      <a class="site-link" href="#busca">Buscar</a>
     </div>
-    <section aria-label="Resultados da busca">
+  </header>
+  <main class="shell pagina-inicial">
+    <section class="hero" aria-labelledby="titulo-principal">
+      <div class="hero-content">
+        <h1 id="titulo-principal">Filmes e séries,<br><em>em um só lugar.</em></h1>
+        <p>Encontre vídeos, arquivos .torrent e links magnet em catálogos autorizados.</p>
+      </div>
+    </section>
+
+    <section class="painel-busca" aria-label="Localizar arquivos">
+      <form id="busca">
+        <label for="url">Endereço da página ou link direto</label>
+        <div class="campo">
+          <div class="campo-url">
+            <span class="icone-busca" aria-hidden="true"></span>
+            <input id="url" type="text" inputmode="url" autocomplete="off" placeholder="https://exemplo.com/filmes" required maxlength="4096">
+          </div>
+          <button class="botao primario" type="submit">Buscar links</button>
+          <button class="botao secundario" id="varrer" type="submit">Varrer catálogo</button>
+        </div>
+        <label class="opcao">
+          <input id="automatico" type="checkbox">
+          <span>Baixar automaticamente quando houver um único resultado</span>
+        </label>
+      </form>
+      <div class="catalogo">
+        <button class="botao discreto" id="usar-filmesmp4" type="button">Varrer FilmesMP4 <span class="icone-seta" aria-hidden="true"></span></button>
+        <button class="botao secundario" id="parar" type="button" hidden>Parar varredura</button>
+      </div>
+    </section>
+
+    <section class="area-resultados" aria-labelledby="titulo-resultados">
+      <h2 id="titulo-resultados">Resultados</h2>
       <p id="estado" role="status"></p>
       <ul id="resultados"></ul>
     </section>

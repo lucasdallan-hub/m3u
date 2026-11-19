@@ -1,12 +1,16 @@
 const videoPath = /\.(mp4|mkv|webm|mov|m4v|avi)$/i;
+const torrentPath = /\.torrent$/i;
+const torrentMimeTypes = new Set(["application/x-bittorrent", "application/x-torrent"]);
 const pageSize = 4 * 1024 * 1024;
 const maxResults = 100;
 const catalogHost = "filmesmp4.biz";
 const catalogFreshMs = 2 * 60 * 1000;
 const catalogRetentionSeconds = 24 * 60 * 60;
+const catalogRecoveryMs = 30 * 1000;
 const redirects = new Set([301, 302, 303, 307, 308]);
 const transientStatuses = new Set([429, 502, 503, 504]);
 const publicHosts = new Set();
+const apiHeaders = { "Cache-Control": "no-store", "X-Filmes-Diretos": "worker" };
 
 class RequestError extends Error {
   constructor(message, status = 400, retryAfter = null) {
@@ -171,6 +175,25 @@ function filename(url) {
   }
 }
 
+function isMediaFile(name) {
+  return videoPath.test(name) || torrentPath.test(name);
+}
+
+function mediaFile(url, name) {
+  return torrentPath.test(name) ? { url: url.href, name, tipo: "torrent" } : { url: url.href, name };
+}
+
+function magnetLink(address) {
+  if (address.length > 4096 || !/^magnet:\?/i.test(address)) return null;
+  const url = new URL(address);
+  const topic = url.searchParams.getAll("xt").some(value =>
+    /^urn:(?:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})|btmh:1220[a-f0-9]{64})$/i.test(value),
+  );
+  if (!topic) return null;
+  const name = url.searchParams.get("dn")?.trim().slice(0, 200) || "Link magnet";
+  return { url: url.href, name, tipo: "magnet" };
+}
+
 function boundedHtml(response, limit = pageSize) {
   let bytes = 0;
   const limited = response.body.pipeThrough(new TransformStream({
@@ -253,7 +276,7 @@ async function catalog(url, hosts) {
   function captureCover(element) {
     const link = anchor?.url;
     if (!link || link.href === base.href || (link.pathname === "/" && !link.search) ||
-      videoPath.test(filename(link)) || link.href === next) return;
+      isMediaFile(filename(link)) || link.href === next) return;
     const image = coverUrl(element, base);
     if (!image && element.tagName !== "img") return;
     const alt = element.getAttribute("alt")?.trim();
@@ -284,7 +307,7 @@ async function catalog(url, hosts) {
     .on("a[href] img, a[href] picture source, a[href] [style], a[href] [data-bg], a[href] [data-poster]", {
       element: captureCover,
     });
-  readVideoLinks(rewriter, videos, base, hosts);
+  readMediaLinks(rewriter, videos, base, hosts);
   const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
   const result = { titulos: [...titles.values()], proxima: next };
@@ -295,18 +318,32 @@ async function catalog(url, hosts) {
   return result;
 }
 
+function saveCatalogSnapshot(key, data, savedAt, context, retryAt = 0) {
+  const remaining = catalogRetentionSeconds - Math.ceil((Date.now() - savedAt) / 1000);
+  if (remaining <= 0) return;
+  const response = Response.json(data, {
+    headers: {
+      "Cache-Control": `public, max-age=${remaining}`,
+      "X-Catalog-Saved-At": String(savedAt),
+      "X-Catalog-Retry-At": String(retryAt),
+    },
+  });
+  context.waitUntil(caches.default.put(key, response).catch(() => {}));
+}
+
 async function serveCatalog(endpoint, url, hosts, context) {
   // Canonicalize the key so equivalent requests reuse the same catalog snapshot.
   const cacheUrl = new URL(endpoint.pathname, endpoint.origin);
   cacheUrl.searchParams.set("url", url.href);
   const cacheKey = new Request(cacheUrl);
-  const headers = { "Cache-Control": "no-store" };
   let snapshot;
   let savedAt;
+  let retryAt;
   try {
     const cached = await caches.default.match(cacheKey);
     if (cached) {
       savedAt = Number(cached.headers.get("X-Catalog-Saved-At"));
+      retryAt = Number(cached.headers.get("X-Catalog-Retry-At"));
       const age = Date.now() - savedAt;
       if (age >= 0 && age < catalogRetentionSeconds * 1000) {
         const data = await cached.json();
@@ -318,7 +355,10 @@ async function serveCatalog(endpoint, url, hosts, context) {
   }
 
   if (snapshot && Date.now() - savedAt < catalogFreshMs) {
-    return Response.json(snapshot, { headers });
+    return Response.json(snapshot, { headers: apiHeaders });
+  }
+  if (snapshot && retryAt > Date.now()) {
+    return Response.json({ ...snapshot, desatualizado: true }, { headers: apiHeaders });
   }
 
   let data;
@@ -326,21 +366,16 @@ async function serveCatalog(endpoint, url, hosts, context) {
     data = await catalog(url, hosts);
   } catch (error) {
     if (snapshot && error instanceof RequestError && transientStatuses.has(error.status)) {
-      return Response.json({ ...snapshot, desatualizado: true }, { headers });
+      saveCatalogSnapshot(cacheKey, snapshot, savedAt, context, Date.now() + catalogRecoveryMs);
+      return Response.json({ ...snapshot, desatualizado: true }, { headers: apiHeaders });
     }
     throw error;
   }
 
   if (data.titulos.length) {
-    const cached = Response.json(data, {
-      headers: {
-        "Cache-Control": `public, max-age=${catalogRetentionSeconds}`,
-        "X-Catalog-Saved-At": String(Date.now()),
-      },
-    });
-    context.waitUntil(caches.default.put(cacheKey, cached).catch(() => {}));
+    saveCatalogSnapshot(cacheKey, data, Date.now(), context);
   }
-  return Response.json(data, { headers });
+  return Response.json(data, { headers: apiHeaders });
 }
 
 const mirrorButton = /^(?:baixar\s+(?:(?:em|no|na|por|pelo|pela)\s+)?|download\s+)?(mega|daily|freedl|usersd)$/i;
@@ -438,10 +473,15 @@ function addMirrorReaders(rewriter, base, groups, hosts) {
     });
 }
 
-function readVideoLinks(rewriter, videos, base, hosts) {
+function readMediaLinks(rewriter, videos, base, hosts) {
   function collect(element, attribute) {
     const address = htmlUrl(element.getAttribute(attribute));
     if (!address || videos.size >= maxResults) return;
+    if (attribute === "href" && /^magnet:/i.test(address)) {
+      const magnet = magnetLink(address);
+      if (magnet) videos.set(magnet.url, magnet);
+      return;
+    }
     let link;
     try {
       link = allowedUrl(address, hosts, base);
@@ -450,10 +490,10 @@ function readVideoLinks(rewriter, videos, base, hosts) {
     }
     const name = filename(link);
     const namedDownload = element.getAttribute("download")?.trim();
-    if (videoPath.test(name)) {
-      videos.set(link.href, { url: link.href, name });
-    } else if (!hosts.size && namedDownload && videoPath.test(namedDownload)) {
-      videos.set(link.href, { url: link.href, name: namedDownload });
+    if (isMediaFile(name)) {
+      videos.set(link.href, mediaFile(link, name));
+    } else if (!hosts.size && namedDownload && isMediaFile(namedDownload)) {
+      videos.set(link.href, mediaFile(link, namedDownload));
     }
   }
 
@@ -466,14 +506,14 @@ async function search(url, hosts, origin) {
   const { base, html } = await readHtml(url, hosts, origin);
   const videos = new Map();
   const rewriter = new HTMLRewriter();
-  readVideoLinks(rewriter, videos, base, hosts);
+  readMediaLinks(rewriter, videos, base, hosts);
   const groups = new Map();
   if (origin) addMirrorReaders(rewriter, base, groups, hosts);
   const parsed = rewriter.transform(html);
   await parsed.body.pipeTo(new WritableStream());
   const opcoes = [...groups].map(([titulo, links]) => ({ titulo, links: [...links.values()] }));
   return Response.json({ videos: [...videos.values()], downloadDireto: !hosts.size, ...(origin ? { opcoes } : {}) }, {
-    headers: { "Cache-Control": "no-store" },
+    headers: apiHeaders,
   });
 }
 
@@ -496,7 +536,7 @@ async function publishedFile(page, provider, signal) {
       if (!address) return;
       try {
         const file = allowedUrl(address, publicHosts, page, { keepHash: true });
-        if (provider(file) && videoPath.test(filename(file))) files.set(file.href, file);
+        if (provider(file) && isMediaFile(filename(file))) files.set(file.href, file);
       } catch {
         // Ignore unsupported destinations.
       }
@@ -532,9 +572,9 @@ async function resolveMirror(url, hosts) {
     const attachment = response.headers.get("Content-Disposition")
       ?.match(/;\s*filename\*?\s*=\s*(?:"([^"]+)"|([^;]+))/i);
     const name = attachment?.[1] ?? attachment?.[2]?.trim() ?? "";
-    if (type?.startsWith("video/") || type === "application/mp4" ||
+    if (type?.startsWith("video/") || type === "application/mp4" || torrentMimeTypes.has(type) ||
       (type === "application/octet-stream" &&
-        (videoPath.test(filename(current)) || videoPath.test(name)))) {
+        (isMediaFile(filename(current)) || isMediaFile(name)))) {
       return current;
     }
     if (!isHtml(response) || current.search || current.hash || current.hostname === catalogHost) {
@@ -562,20 +602,29 @@ async function openMirror(url, hosts) {
 }
 
 async function download(url, hosts) {
-  if (!videoPath.test(filename(url))) {
-    throw new RequestError("Informe um link direto de vídeo.");
+  const originalName = filename(url);
+  if (!isMediaFile(originalName)) {
+    throw new RequestError("Informe um link direto de vídeo ou torrent.");
   }
-  const { response } = await requestSource(url, hosts, "video/*, application/octet-stream");
-  if (!isVideoResponse(response)) {
+  const torrent = torrentPath.test(originalName);
+  const accept = torrent ? "application/x-bittorrent, application/octet-stream" : "video/*, application/octet-stream";
+  const { response } = await requestSource(url, hosts, accept);
+  const type = contentType(response);
+  const accepted = torrent
+    ? torrentMimeTypes.has(type) || type === "application/octet-stream"
+    : isVideoResponse(response);
+  if (!accepted) {
     await response.body.cancel();
-    throw new RequestError("A fonte não retornou um arquivo de vídeo.", 502);
+    throw new RequestError(torrent
+      ? "A fonte não retornou um arquivo torrent."
+      : "A fonte não retornou um arquivo de vídeo.", 502);
   }
-  const name = filename(url).replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const name = originalName.replace(/[^a-zA-Z0-9_.-]/g, "_");
   const extension = name.lastIndexOf(".");
   const attachment = name.slice(0, extension).slice(0, 100) + name.slice(extension);
   return new Response(response.body, {
     headers: {
-      "Content-Type": "application/octet-stream",
+      "Content-Type": torrent ? "application/x-bittorrent" : "application/octet-stream",
       "Content-Disposition": `attachment; filename="${attachment}"`,
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
@@ -589,7 +638,7 @@ export default {
     if (!["/api/busca", "/api/baixar", "/api/catalogo", "/api/abrir"].includes(endpoint.pathname)) {
       return Response.json({ erro: "Rota não encontrada." }, {
         status: 404,
-        headers: { "Cache-Control": "no-store" },
+        headers: apiHeaders,
       });
     }
     if (request.method !== "GET") {
@@ -601,11 +650,16 @@ export default {
         host => host.trim(),
       ).filter(Boolean));
       if (!hosts.size && endpoint.pathname === "/api/baixar") {
-        throw new RequestError("No modo aberto o vídeo é acessado no site de origem.", 403);
+        throw new RequestError("No modo aberto o arquivo é acessado no site de origem.", 403);
       }
       const value = endpoint.searchParams.get("url")?.trim();
       if (!value || value.length > 4096) {
-        throw new RequestError("Informe o endereço da página ou do vídeo.");
+        throw new RequestError("Informe o endereço da página, do vídeo ou do torrent.");
+      }
+      if (endpoint.pathname === "/api/busca" && /^magnet:/i.test(value)) {
+        const magnet = magnetLink(value);
+        if (!magnet) throw new RequestError("Informe um link magnet válido.");
+        return Response.json({ videos: [magnet], downloadDireto: true }, { headers: apiHeaders });
       }
       if (endpoint.pathname === "/api/abrir") {
         const url = allowedUrl(value, publicHosts, undefined, { keepHash: true });
@@ -614,13 +668,18 @@ export default {
       const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
       if (endpoint.pathname === "/api/catalogo") return await serveCatalog(endpoint, url, hosts, context);
       if (endpoint.pathname === "/api/baixar") return await download(url, hosts);
+      if (torrentPath.test(filename(url))) {
+        return Response.json({ videos: [mediaFile(url, filename(url))], downloadDireto: !hosts.size }, {
+          headers: apiHeaders,
+        });
+      }
       const origin = endpoint.searchParams.get("catalogo") === "1" ? url.origin : undefined;
       return await search(url, hosts, origin);
     } catch (error) {
       const failure = error instanceof RequestError
         ? error
         : new RequestError("Não foi possível consultar a fonte.", 502);
-      const headers = new Headers({ "Cache-Control": "no-store" });
+      const headers = new Headers(apiHeaders);
       if (failure.retryAfter) headers.set("Retry-After", failure.retryAfter);
       return Response.json({ erro: failure.message }, { status: failure.status, headers });
     }

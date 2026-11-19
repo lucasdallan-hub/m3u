@@ -1,4 +1,6 @@
-const catalogRetryLimitMs = 3000;
+const catalogRetryBudgetMs = 15_000;
+const catalogRetryDelaysMs = [1_200, 3_500, 7_500];
+const rateLimitRetryBudgetMs = 3_000;
 const catalogTransientStatuses = new Set([429, 502, 503, 504]);
 const catalogCacheKey = "filmes-diretos:catalogo:v1";
 const catalogCacheMaxAgeMs = 24 * 60 * 60 * 1000;
@@ -67,13 +69,12 @@ function saveCatalogPage(url, data, paginaInicial) {
   }
 }
 
-function retryDelay(response) {
+function retryDelay(response, minimumDelay) {
   const value = response.headers.get("Retry-After")?.trim();
-  const defaultDelay = response.status === 429 ? 1000 : 600;
-  if (!value) return defaultDelay;
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  if (!value) return minimumDelay;
+  if (/^\d+$/.test(value)) return Math.max(minimumDelay, Number(value) * 1000);
   const date = /[a-z]/i.test(value) ? Date.parse(value) : NaN;
-  return Number.isNaN(date) ? defaultDelay : Math.max(0, date - Date.now());
+  return Number.isNaN(date) ? minimumDelay : Math.max(minimumDelay, date - Date.now());
 }
 
 function waitForRetry(delay, signal) {
@@ -91,6 +92,15 @@ function waitForRetry(delay, signal) {
   });
 }
 
+function catalogUnavailableMessage(response) {
+  if (response.status === 503 && !response.headers.has("X-Filmes-Diretos")) {
+    const ray = response.headers.get("CF-Ray");
+    const reference = ray ? ` Referência Cloudflare ${ray}.` : "";
+    return `A hospedagem devolveu HTTP 503 sem identificar a API do Filmes Diretos.${reference}`;
+  }
+  return `O serviço do catálogo está temporariamente indisponível (HTTP ${response.status}).`;
+}
+
 export async function query(endpoint, parameters, signal, { paginaInicial = false } = {}) {
   const search = new URLSearchParams(parameters);
   const url = `/api/${endpoint}?${search}`;
@@ -102,7 +112,9 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
   };
   let response;
   try {
+    signal?.throwIfAborted();
     response = await fetch(url, options);
+    let remainingWait = catalogRetryBudgetMs;
     for (let attempt = 0; catalogUrl && catalogTransientStatuses.has(response.status); attempt++) {
       signal?.throwIfAborted();
       const saved = cachedCatalogPage(catalogUrl);
@@ -111,10 +123,16 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
         signal?.throwIfAborted();
         return saved;
       }
-      const delay = retryDelay(response);
-      if (attempt === 1 || delay > catalogRetryLimitMs) break;
+      const rateLimited = response.status === 429;
+      const retries = rateLimited ? 1 : catalogRetryDelaysMs.length;
+      if (attempt >= retries) break;
+      const delay = retryDelay(response, rateLimited ? 1_000 : catalogRetryDelaysMs[attempt]);
+      const budget = rateLimited ? Math.min(rateLimitRetryBudgetMs, remainingWait) : remainingWait;
+      if (delay > budget) break;
       await response.body?.cancel();
+      const waitingSince = performance.now();
       await waitForRetry(delay, signal);
+      remainingWait -= performance.now() - waitingSince;
       response = await fetch(url, options);
     }
   } catch (error) {
@@ -126,7 +144,7 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
   }
 
   const unavailableMessage = catalogUrl && catalogTransientStatuses.has(response.status)
-    ? `O serviço do catálogo está temporariamente indisponível (HTTP ${response.status}).`
+    ? catalogUnavailableMessage(response)
     : null;
   const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -143,7 +161,10 @@ export async function query(endpoint, parameters, signal, { paginaInicial = fals
     if (!(error instanceof SyntaxError)) throw error;
     throw new Error(unavailableMessage || "A API devolveu uma resposta JSON inválida.");
   }
-  if (!response.ok) throw new Error(data?.erro || unavailableMessage || `A consulta falhou (HTTP ${response.status}).`);
+  if (!response.ok) {
+    const apiError = typeof data?.erro === "string" ? data.erro.trim() : "";
+    throw new Error(apiError || unavailableMessage || `A consulta falhou (HTTP ${response.status}).`);
+  }
   if (catalogUrl) {
     if (!isCatalogPage(data)) throw new Error("A API devolveu uma página de catálogo inválida.");
     if (data.desatualizado !== true && data.titulos.length) saveCatalogPage(catalogUrl, data, paginaInicial);

@@ -44,8 +44,12 @@ O Worker serve a interface e processa a busca. A busca lê os links diretos do H
 
 ### Varredura de catálogos
 
-Na interface web, informe uma página pública HTTPS e use **Varrer catálogo** para listar as capas seguindo a paginação marcada no HTML. Para consultar os arquivos diretos de uma única página, use **Buscar vídeos**. Clique em uma capa para consultar os links daquele filme ou série. Quando o domínio do arquivo estiver autorizado para download pelo Worker, use **Baixar**. No modo aberto, o botão leva ao arquivo na origem e o navegador pode oferecer a opção de salvá-lo. **Parar varredura** preserva as capas já exibidas.
+Na interface web, informe uma página pública HTTPS e use **Varrer catálogo** para listar as capas seguindo a paginação marcada no HTML. Para consultar os arquivos diretos de uma única página, use **Buscar links**. Clique em uma capa para consultar os links daquele filme ou série. Quando o domínio do arquivo estiver autorizado para download pelo Worker, use **Baixar**. No modo aberto, o botão leva ao arquivo na origem e o navegador pode oferecer a opção de salvá-lo. **Parar varredura** preserva as capas já exibidas.
 
 Quando a página publicar botões MEGA, DAILY, FREEDL ou USERSD no HTML, eles aparecem agrupados pelos títulos das opções de download, como **480P DUBLADO**. Os botões abrem em uma nova aba. Para links do catálogo em `/dl/` e domínios configurados em `DOMINIOS_PERMITIDOS`, o Worker tenta seguir os redirecionamentos e confirmar o arquivo público. Se o provedor exigir sessão ou oferecer vários arquivos, o botão abre a página oficial para concluir a escolha.
 
 O catálogo reaproveita por dois minutos as páginas carregadas com sucesso pelo Worker. Em falhas temporárias, como HTTP 503, a última cópia disponível pode ser usada por até 24 horas, com um aviso na interface. Se o Worker estiver indisponível, o navegador usa as páginas daquele catálogo que carregou recentemente. Na primeira visita, a origem precisa responder para exibir as capas. Os links de download são consultados ao abrir o título.
+
+### Torrents
+
+Na versão web, **Buscar links** também aceita um endereço HTTPS de arquivo `.torrent` ou um link magnet. A busca em páginas reconhece essas opções quando estão publicadas no HTML. Use **Baixar .torrent** nos domínios autorizados pelo Worker ou abra o arquivo na origem no modo aberto. **Abrir no cliente BitTorrent** entrega o magnet ao aplicativo instalado no dispositivo. A transferência entre pares é feita pelo cliente BitTorrent.

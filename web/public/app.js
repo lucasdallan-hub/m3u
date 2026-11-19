@@ -1,4 +1,5 @@
 import { query } from "./api.js";
+import { addMediaLinks } from "./midia.js";
 
 const form = document.querySelector("#busca");
 const input = document.querySelector("#url");
@@ -16,47 +17,30 @@ function setBusy(value) {
   searchButton.disabled = scanButton.disabled = filmsMp4Button.disabled = value;
 }
 
-function showVideos(videos, downloadDireto) {
-  for (const video of videos) {
-    const row = document.createElement("li");
-    const name = document.createElement("span");
-    const link = document.createElement("a");
-    name.textContent = video.name;
-    if (downloadDireto) {
-      link.textContent = "Abrir vídeo";
-      link.href = video.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-    } else {
-      link.textContent = "Baixar";
-      link.href = `/api/baixar?${new URLSearchParams({ url: video.url })}`;
-      link.download = "";
-    }
-    link.setAttribute("aria-label", `${link.textContent} ${video.name}`);
-    row.append(name, link);
-    results.append(row);
-  }
-}
-
 async function searchVideos(address) {
   const autoDownload = automatic.checked;
   results.replaceChildren();
   results.classList.remove("grade-catalogo");
-  status.textContent = "Buscando vídeos…";
+  status.textContent = "Buscando links…";
   setBusy(true);
 
   try {
     const data = await query("busca", { url: address });
-    showVideos(data.videos, data.downloadDireto);
+    const links = addMediaLinks(results, data.videos, data.downloadDireto);
 
-    status.textContent = data.videos.length
-      ? `${data.videos.length} vídeo(s) encontrado(s).`
-      : "Nenhum link direto de vídeo foi encontrado nesta página.";
-    if (autoDownload && data.videos.length === 1) {
-      if (data.downloadDireto) {
+    status.textContent = links.length
+      ? `${links.length} link(s) encontrado(s).`
+      : "Nenhum link direto de vídeo ou torrent foi encontrado nesta página.";
+    if (autoDownload && links.length === 1) {
+      const [{ link, tipo }] = links;
+      if (tipo === "magnet") {
+        status.textContent = "Selecione o link para abrir o cliente BitTorrent.";
+      } else if (data.downloadDireto && tipo === "torrent") {
+        status.textContent = "Abra o arquivo .torrent no site de origem e use um cliente BitTorrent.";
+      } else if (data.downloadDireto) {
         status.textContent = "Abra o vídeo encontrado. O site de origem define se ele será baixado ou reproduzido.";
       } else {
-        results.querySelector("a").click();
+        link.click();
       }
     }
   } catch (error) {
@@ -131,10 +115,9 @@ async function scanCatalog(address) {
       : withOrigin;
   }
   function showCatalogVideos() {
-    if (titles.size || !videos.size) return false;
+    if (titles.size || !videos.size) return 0;
     results.classList.remove("grade-catalogo");
-    showVideos(videos.values(), downloadDireto);
-    return true;
+    return addMediaLinks(results, videos.values(), downloadDireto).length;
   }
   try {
     while (page && !pages.has(page)) {
@@ -155,20 +138,21 @@ async function scanCatalog(address) {
         showCatalogStatus(`${titles.size} título(s) no catálogo. Buscando mais capas…`);
       }
     }
+    const mediaCount = showCatalogVideos();
     if (titles.size) {
       showCatalogStatus("Escolha uma capa para ver as opções de download.");
-    } else if (showCatalogVideos()) {
-      showCatalogStatus(`${videos.size} vídeo(s) direto(s) encontrado(s).`);
+    } else if (mediaCount) {
+      showCatalogStatus(`${mediaCount} link(s) direto(s) encontrado(s).`);
     } else {
       showCatalogStatus("Nenhuma capa com link foi encontrada nas páginas do catálogo.");
     }
   } catch (error) {
-    const showedVideos = showCatalogVideos();
+    const mediaCount = showCatalogVideos();
     if (signal.aborted) {
-      const count = showedVideos ? `${videos.size} vídeo(s)` : `${titles.size} capa(s)`;
+      const count = mediaCount ? `${mediaCount} link(s)` : `${titles.size} capa(s)`;
       showCatalogStatus(`Varredura interrompida. ${count} exibido(s).`);
     } else {
-      const partial = titles.size || showedVideos ? " Os resultados encontrados foram mantidos." : "";
+      const partial = titles.size || mediaCount ? " Os resultados encontrados foram mantidos." : "";
       showCatalogStatus(`Falha ao carregar o catálogo. ${error.message}${partial}`);
     }
   } finally {
