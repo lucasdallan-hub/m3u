@@ -47,14 +47,15 @@ function entryMetadata(body, lineNumber) {
   const attribute = /(?:^|\s)([a-z_][a-z\d_.:-]*)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/gi;
   for (const [, key, doubleQuoted, singleQuoted, unquoted] of body.slice(0, separator).matchAll(attribute)) {
     const field = key.toLowerCase();
-    if (field !== "tvg-name" && field !== "tvg-logo") continue;
+    if (field !== "tvg-name" && field !== "tvg-logo" && field !== "group-title") continue;
     const value = doubleQuoted ?? singleQuoted ?? unquoted;
     attributes.set(field, value.replace(/\\(["'\\])/g, "$1"));
   }
 
   return {
-    name: normalizedName(body.slice(separator + 1)) || normalizedName(attributes.get("tvg-name") ?? ""),
+    name: body.slice(separator + 1).trim() || attributes.get("tvg-name")?.trim() || "",
     cover: normalizedCover(attributes.get("tvg-logo") ?? ""),
+    group: attributes.get("group-title")?.trim() ?? "",
   };
 }
 
@@ -73,7 +74,7 @@ function isMediaAddress(line) {
   return !/[<>{}]/.test(path) && (mediaExtension.test(path) || /(?:^|[^/\\])[\/\\][^/\\]/.test(path));
 }
 
-export function cleanPlaylist(text) {
+export function cleanPlaylist(text, { includeItems = false } = {}) {
   if (typeof text !== "string" || !text.trim() || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) {
     throw new Error("O arquivo deve conter uma playlist M3U ou M3U8 de texto.");
   }
@@ -82,6 +83,7 @@ export function cleanPlaylist(text) {
   const lines = text.slice(bom.length).split(/(\r\n|\n|\r)/);
   const output = [bom];
   const identities = new Set();
+  const items = includeItems ? [] : null;
   let pending = [];
   let metadata = null;
   let total = 0;
@@ -119,8 +121,17 @@ export function cleanPlaylist(text) {
     }
 
     total++;
-    const name = metadata?.name ?? "";
+    const name = normalizedName(metadata?.name ?? "");
     const cover = metadata?.cover ?? "";
+    if (items) {
+      const path = line.split(/[|?#]/, 1)[0].trimEnd();
+      const filename = path.split(/[\\/]/).filter(Boolean).pop();
+      items.push({
+        name: metadata?.name || filename || `Item ${total}`,
+        cover,
+        group: metadata?.group ?? "",
+      });
+    }
     const key = JSON.stringify(name && cover ? ["cover", name, cover] : ["address", name, line]);
     if (identities.has(key)) {
       removidos++;
@@ -135,5 +146,6 @@ export function cleanPlaylist(text) {
 
   if (metadata) throw new Error("A última entrada #EXTINF não tem endereço de mídia.");
   if (!total) throw new Error("A playlist não contém endereços de mídia.");
-  return { texto: output.join("") + pending.join(""), total, removidos };
+  const result = { texto: output.join("") + pending.join(""), total, removidos };
+  return items ? { ...result, items } : result;
 }

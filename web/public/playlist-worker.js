@@ -12,7 +12,7 @@ self.addEventListener("message", async ({ data: file }) => {
       texto = new TextDecoder("windows-1252").decode(bytes);
       convertido = true;
     }
-    self.postMessage({ ...cleanPlaylist(texto), convertido });
+    self.postMessage({ ...cleanPlaylist(texto, { includeItems: true }), convertido });
   } catch (error) {
     self.postMessage({ erro: error.message || "Não foi possível ler a playlist." });
   }
