@@ -6,9 +6,10 @@
   <meta name="theme-color" content="#121215">
   <title>Opções de download | Filmes Diretos</title>
   <link rel="stylesheet" href="/estilo.css">
+  <script src="/menu.js" type="module"></script>
   <script src="/titulo.js" type="module"></script>
 </head>
-<body>
+<body class="app-com-menu" data-menu="catalogo">
   <header class="site-header">
     <div class="shell site-header-inner">
       <a class="brand" href="/">
@@ -17,9 +18,10 @@
       </a>
     </div>
   </header>
+  <nav id="menu-lateral" class="menu-lateral" aria-label="Ferramentas"></nav>
   <main class="shell pagina-titulo">
     <nav class="detalhe-nav" aria-label="Catálogo">
-      <a class="detalhe-voltar" href="/"><span aria-hidden="true">←</span> Voltar ao catálogo</a>
+      <a class="detalhe-voltar" href="/catalogo.html"><span aria-hidden="true">←</span> Voltar ao catálogo</a>
     </nav>
     <div class="detalhe-layout">
       <div class="detalhe-capa" hidden>

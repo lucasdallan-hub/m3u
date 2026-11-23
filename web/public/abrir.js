@@ -7,7 +7,7 @@ const status = document.querySelector("#abrir-status");
 const back = document.querySelector(".detalhe-voltar");
 let frameLoads = 0;
 
-const internalPages = new Set(["/", "/index", "/index.html", "/titulo", "/titulo.html"]);
+const internalPages = new Set(["/", "/index", "/index.html", "/catalogo", "/catalogo.html", "/titulo", "/titulo.html"]);
 if (document.referrer) {
   const previous = new URL(document.referrer);
   if (previous.origin === location.origin && internalPages.has(previous.pathname)) {

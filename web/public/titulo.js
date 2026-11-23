@@ -90,7 +90,7 @@ if (!source) {
 } else {
   const catalog = publicHttps(parameters.get("catalogo"));
   if (catalog) {
-    document.querySelector(".detalhe-voltar").href = `/?${new URLSearchParams({ catalogo: catalog.href })}`;
+    document.querySelector(".detalhe-voltar").href = `/catalogo.html?${new URLSearchParams({ catalogo: catalog.href })}`;
   }
   const original = document.querySelector("#origem-titulo");
   const originalLink = original.querySelector("a");

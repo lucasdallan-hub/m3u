@@ -44,7 +44,7 @@ O Worker serve a interface e processa a busca. A busca lê os links diretos do H
 
 ### Varredura de catálogos
 
-Na interface web, informe uma página pública HTTPS e use **Varrer catálogo** para listar as capas seguindo a paginação marcada no HTML. Para consultar os arquivos diretos de uma única página, use **Buscar links**. Clique em uma capa para consultar os links daquele filme ou série. Quando o domínio do arquivo estiver autorizado para download pelo Worker, use **Baixar**. No modo aberto, o botão leva ao arquivo na origem e o navegador pode oferecer a opção de salvá-lo. **Parar varredura** preserva as capas já exibidas.
+No menu lateral, **Varrer catálogo** abre a tela que lista as capas de uma página pública HTTPS e segue a paginação marcada no HTML. **Buscar links** abre a busca de arquivos diretos em uma única página. Clique em uma capa para consultar os links daquele filme ou série. Quando o domínio do arquivo estiver autorizado para download pelo Worker, use **Baixar**. No modo aberto, o botão leva ao arquivo na origem e o navegador pode oferecer a opção de salvá-lo. **Parar varredura** preserva as capas já exibidas.
 
 Quando a página publicar botões MEGA, DAILY, FREEDL ou USERSD no HTML, eles aparecem agrupados pelos títulos das opções de download, como **480P DUBLADO**. Os botões abrem o visualizador do Filmes Diretos na própria aba. Para links do catálogo em `/dl/` e domínios configurados em `DOMINIOS_PERMITIDOS`, o Worker tenta seguir os redirecionamentos e confirmar o arquivo público. Se o provedor bloquear a exibição dentro do visualizador, use **Abrir na mesma aba** para acessar a página oficial.
 
@@ -53,3 +53,7 @@ O catálogo reaproveita por dois minutos as páginas carregadas com sucesso pelo
 ### Torrents
 
 Na versão web, **Buscar links** também aceita um endereço HTTPS de arquivo `.torrent` ou um link magnet. A busca em páginas reconhece essas opções quando estão publicadas no HTML. Use **Baixar .torrent** nos domínios autorizados pelo Worker ou abra o arquivo na origem no modo aberto. **Abrir no cliente BitTorrent** entrega o magnet ao aplicativo instalado no dispositivo. A transferência entre pares é feita pelo cliente BitTorrent.
+
+### Limpar playlists M3U
+
+No menu **Limpar M3U**, selecione um arquivo `.m3u` ou `.m3u8`, clique em **Remover duplicados** e baixe a playlist limpa. A ferramenta mantém a primeira entrada quando coincidem o nome e a URL de capa (`tvg-logo`). Entre entradas sem nome ou capa, ela exige a mesma URL da mídia e compara o nome quando disponível. A ordem dos itens e os metadados das entradas mantidas são preservados. O arquivo é processado no navegador, e manifestos de streaming HLS ficam fora da limpeza.

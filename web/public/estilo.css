@@ -61,14 +61,57 @@ input, button { font: inherit; }
   border-block: .32rem solid transparent;
   border-left: .53rem solid var(--accent-ink);
 }
-.site-link {
-  color: var(--muted);
-  font-size: .92rem;
-  font-weight: 650;
+.app-com-menu {
+  display: grid;
+  grid-template-columns: clamp(10.5rem, 16vw, 13rem) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
 }
-.site-link:hover { color: var(--accent); }
+.app-com-menu > .site-header { grid-column: 1 / -1; }
+.app-com-menu .site-header-inner { width: auto; margin-inline: 1.5rem; }
+.app-com-menu > main.shell { grid-column: 2; min-width: 0; }
+.menu-lateral {
+  display: grid;
+  align-content: start;
+  gap: .4rem;
+  padding: 1.25rem .85rem;
+  border-inline-end: 1px solid #2a262a;
+  background: #151417;
+}
+.menu-link {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 2.75rem;
+  padding: .58rem .75rem;
+  border: 1px solid transparent;
+  border-radius: .65rem;
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 680;
+  line-height: 1.25;
+}
+.menu-link:hover { color: var(--ink); background: var(--raised); }
+.menu-link:is(.is-active, [aria-current="page"]) {
+  border-color: #674a36;
+  color: var(--accent-bright);
+  background: #32251f;
+}
+.menu-link:focus-visible { outline-offset: 2px; }
 
 .pagina-inicial { padding-block: 1.65rem 4.5rem; }
+.pagina-catalogo { padding-block: clamp(1.65rem, 4vw, 3rem) 4.5rem; }
+.entrada-catalogo {
+  display: grid;
+  gap: .65rem;
+  margin-bottom: clamp(1.1rem, 3vw, 1.8rem);
+}
+.entrada-catalogo h1 {
+  font-size: clamp(2rem, 5vw, 3.6rem);
+  line-height: 1.05;
+  letter-spacing: -.06em;
+}
+.entrada-catalogo p { max-width: 40rem; }
+
 .hero {
   position: relative;
   display: flex;
@@ -117,6 +160,7 @@ input, button { font: inherit; }
   border-radius: var(--radius);
   box-shadow: 0 22px 50px #0006;
 }
+.pagina-catalogo .painel-busca { width: 100%; margin: 0; }
 #busca { scroll-margin-top: 1.25rem; }
 #busca > label:first-child {
   display: block;
@@ -130,6 +174,7 @@ input, button { font: inherit; }
   gap: .65rem;
   margin-block: .65rem 1rem;
 }
+.campo.campo-simples { grid-template-columns: minmax(0, 1fr) auto; }
 .campo-url {
   display: flex;
   align-items: center;
@@ -392,6 +437,46 @@ button:disabled { opacity: .53; cursor: wait; }
 .abrir-frame { min-height: clamp(25rem, 65vh, 50rem); }
 .abrir-player { aspect-ratio: 16 / 9; max-height: 72vh; }
 
+.pagina-playlist {
+  max-width: 54rem;
+  padding-block: 1.7rem 4.5rem;
+}
+.playlist-painel {
+  padding: clamp(1.15rem, 4vw, 2.35rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: radial-gradient(ellipse at 6% 0%, #36262b, transparent 64%), var(--surface);
+}
+.playlist-painel h1 {
+  margin-bottom: .6rem;
+  font-size: clamp(1.8rem, 6vw, 3.05rem);
+  letter-spacing: -.06em;
+}
+.playlist-arquivo {
+  display: grid;
+  gap: .75rem;
+  margin-block: 1.4rem 1.1rem;
+  padding: clamp(.9rem, 3vw, 1.45rem);
+  border: 1px dashed #726067;
+  border-radius: .9rem;
+  background: #151418;
+}
+.playlist-arquivo label { font-weight: 700; }
+.playlist-arquivo input { min-width: 0; max-width: 100%; color: var(--ink); }
+.playlist-arquivo input::file-selector-button {
+  margin: 0 .7rem 0 0;
+  padding: .55rem .8rem;
+  border: 1px solid #53474c;
+  border-radius: .55rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--raised);
+  cursor: pointer;
+}
+.playlist-arquivo p { font-size: .87rem; }
+.playlist-acoes { display: flex; flex-wrap: wrap; gap: .65rem; }
+#playlist-estado:not(:empty) { margin-top: 1rem; overflow-wrap: anywhere; }
+
 @media (min-width: 44rem) {
   .detalhe-layout:has(.detalhe-capa:not([hidden])) {
     grid-template-columns: 13rem minmax(0, 1fr);
@@ -401,8 +486,24 @@ button:disabled { opacity: .53; cursor: wait; }
 @media (max-width: 46rem) {
   .shell { width: calc(100% - 1.6rem); }
   .site-header-inner { min-height: 3.8rem; }
+  .app-com-menu {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+  }
+  .app-com-menu .site-header-inner { margin-inline: .8rem; }
+  .app-com-menu > main.shell { grid-column: 1; }
+  .menu-lateral {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    padding: .55rem .8rem;
+    border-inline-end: 0;
+    border-bottom: 1px solid #2a262a;
+  }
+  .menu-link { padding-inline: .6rem; font-size: .84rem; }
   .painel-busca { width: calc(100% - 1rem); margin-top: -1.4rem; }
   .campo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campo.campo-simples { grid-template-columns: minmax(0, 1fr); }
   .campo-url { grid-column: 1 / -1; }
   .hero {
     background:

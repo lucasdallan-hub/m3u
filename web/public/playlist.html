@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121215">
+  <title>Limpar playlist M3U | Filmes Diretos</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <script src="/menu.js" type="module"></script>
+  <script src="/playlist-tool.js" type="module"></script>
+</head>
+<body class="app-com-menu" data-menu="playlist">
+  <header class="site-header">
+    <div class="shell site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Filmes <strong>Diretos</strong></span>
+      </a>
+    </div>
+  </header>
+  <nav id="menu-lateral" class="menu-lateral" aria-label="Ferramentas"></nav>
+  <main class="shell pagina-playlist">
+    <nav class="detalhe-nav" aria-label="Navegação">
+      <a class="detalhe-voltar" href="/"><span aria-hidden="true">←</span> Voltar à busca</a>
+    </nav>
+    <section class="playlist-painel" aria-labelledby="playlist-titulo">
+      <h1 id="playlist-titulo">Limpar playlist M3U</h1>
+      <p>Se dois itens tiverem o mesmo nome e a mesma capa, a playlist mantém o primeiro.</p>
+
+      <form id="playlist-form">
+        <div class="playlist-arquivo">
+          <label for="playlist-arquivo">Arquivo M3U ou M3U8</label>
+          <input id="playlist-arquivo" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" aria-describedby="playlist-ajuda" required>
+          <p id="playlist-ajuda">O arquivo é processado no navegador.</p>
+        </div>
+        <div class="playlist-acoes">
+          <button class="botao primario" type="submit" disabled>Remover duplicados</button>
+          <a class="botao secundario" id="playlist-baixar" download hidden>Baixar playlist limpa</a>
+        </div>
+        <p id="playlist-estado" role="status"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
