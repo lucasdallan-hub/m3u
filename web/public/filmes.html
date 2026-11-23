@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121215">
+  <title>Buscar filmes | Filmes Diretos</title>
+  <link rel="stylesheet" href="/estilo.css">
+  <script src="/menu.js" type="module"></script>
+  <script src="/catalogo.js" type="module"></script>
+</head>
+<body class="app-com-menu" data-menu="filmes">
+  <header class="site-header">
+    <div class="shell site-header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Filmes <strong>Diretos</strong></span>
+      </a>
+    </div>
+  </header>
+  <nav id="menu-lateral" class="menu-lateral" aria-label="Ferramentas"></nav>
+  <main class="shell pagina-catalogo pagina-filmes">
+    <section class="entrada-catalogo" aria-labelledby="titulo-principal">
+      <h1 id="titulo-principal">Buscar filmes</h1>
+      <p>Digite o nome de um filme ou série para procurar no catálogo escolhido.</p>
+    </section>
+
+    <section class="painel-busca" aria-label="Busca por título">
+      <form id="busca">
+        <div class="campo-titulo">
+          <label for="titulo-busca">Nome do filme ou série</label>
+          <div class="campo-url">
+            <span class="icone-busca" aria-hidden="true"></span>
+            <input id="titulo-busca" type="search" autocomplete="off" placeholder="Digite um título" required maxlength="160">
+          </div>
+        </div>
+        <label for="url">Endereço do catálogo</label>
+        <div class="campo campo-simples">
+          <div class="campo-url">
+            <input id="url" type="text" inputmode="url" autocomplete="off" value="https://filmesmp4.biz/" required maxlength="4096">
+          </div>
+          <button class="botao primario" id="varrer" type="submit">Buscar filmes</button>
+        </div>
+      </form>
+      <div class="catalogo">
+        <button class="botao discreto" id="usar-filmesmp4" type="button">Usar FilmesMP4 <span class="icone-seta" aria-hidden="true"></span></button>
+        <button class="botao secundario" id="parar" type="button" hidden>Parar busca</button>
+      </div>
+    </section>
+
+    <section class="area-resultados" aria-labelledby="titulo-resultados">
+      <h2 id="titulo-resultados">Resultados</h2>
+      <p id="estado" role="status"></p>
+      <ul id="resultados"></ul>
+    </section>
+  </main>
+</body>
+</html>

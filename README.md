@@ -44,6 +44,8 @@ O Worker serve a interface e processa a busca. A busca lê os links diretos do H
 
 ### Varredura de catálogos
 
+O **Dashboard** reúne os atalhos das ferramentas e os catálogos recentes deste navegador. Em **Buscar filmes**, informe um título e o endereço de um catálogo para filtrar as capas por nome. A busca percorre as páginas do catálogo indicado.
+
 No menu lateral, **Varrer catálogo** abre a tela que lista as capas de uma página pública HTTPS e segue a paginação marcada no HTML. **Buscar links** abre a busca de arquivos diretos em uma única página. Clique em uma capa para consultar os links daquele filme ou série. Quando o domínio do arquivo estiver autorizado para download pelo Worker, use **Baixar**. No modo aberto, o botão leva ao arquivo na origem e o navegador pode oferecer a opção de salvá-lo. **Parar varredura** preserva as capas já exibidas.
 
 Quando a página publicar botões MEGA, DAILY, FREEDL ou USERSD no HTML, eles aparecem agrupados pelos títulos das opções de download, como **480P DUBLADO**. Os botões abrem o visualizador do Filmes Diretos na própria aba. Para links do catálogo em `/dl/` e domínios configurados em `DOMINIOS_PERMITIDOS`, o Worker tenta seguir os redirecionamentos e confirmar o arquivo público. Se o provedor bloquear a exibição dentro do visualizador, use **Abrir na mesma aba** para acessar a página oficial.

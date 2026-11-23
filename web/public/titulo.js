@@ -90,7 +90,12 @@ if (!source) {
 } else {
   const catalog = publicHttps(parameters.get("catalogo"));
   if (catalog) {
-    document.querySelector(".detalhe-voltar").href = `/catalogo.html?${new URLSearchParams({ catalogo: catalog.href })}`;
+    const backParameters = new URLSearchParams({ catalogo: catalog.href });
+    const titleQuery = parameters.get("buscaTitulo")?.trim();
+    if (titleQuery) backParameters.set("buscaTitulo", titleQuery);
+    const back = document.querySelector(".detalhe-voltar");
+    back.href = `/${titleQuery ? "filmes" : "catalogo"}.html?${backParameters}`;
+    if (titleQuery) back.querySelector(".detalhe-voltar-label").textContent = "Voltar à busca de filmes";
   }
   const original = document.querySelector("#origem-titulo");
   const originalLink = original.querySelector("a");

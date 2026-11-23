@@ -30,6 +30,13 @@ function readCatalogCache() {
   }
 }
 
+export function recentCatalogs() {
+  return readCatalogCache()
+    .filter(page => page.paginaInicial === true)
+    .sort((left, right) => right.savedAt - left.savedAt)
+    .map(({ url, data }) => ({ url, total: data.titulos.length }));
+}
+
 function cachedCatalogPage(url) {
   const entry = readCatalogCache().find(page => page.url === url);
   return entry && { ...entry.data, desatualizado: true };

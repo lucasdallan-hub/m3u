@@ -97,6 +97,22 @@ input, button { font: inherit; }
   background: #32251f;
 }
 .menu-link:focus-visible { outline-offset: 2px; }
+.botao.menu-toggle { display: none; }
+.menu-gaveta {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(19rem, calc(100% - 2.25rem));
+  height: 100dvh;
+  max-height: none;
+  padding: 1rem;
+  margin: 0;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: #151417;
+  color: var(--ink);
+}
+.menu-gaveta::backdrop { background: #08070abf; }
+.menu-gaveta .menu-lateral { padding: 1rem 0 0; border: 0; }
 
 .pagina-inicial { padding-block: 1.65rem 4.5rem; }
 .pagina-catalogo { padding-block: clamp(1.65rem, 4vw, 3rem) 4.5rem; }
@@ -111,6 +127,76 @@ input, button { font: inherit; }
   letter-spacing: -.06em;
 }
 .entrada-catalogo p { max-width: 40rem; }
+.pagina-filmes .campo-titulo { margin-bottom: 1rem; }
+.pagina-filmes #busca label {
+  display: block;
+  font-size: .89rem;
+  font-weight: 690;
+}
+.pagina-filmes .campo-titulo label { margin-bottom: .65rem; }
+
+.pagina-dashboard { padding-block: clamp(1.65rem, 4vw, 3rem) 4.5rem; }
+.entrada-dashboard h1 {
+  font-size: clamp(2.15rem, 5vw, 3.85rem);
+  line-height: 1.05;
+  letter-spacing: -.06em;
+}
+.dashboard-atalhos, .dashboard-recentes { margin-top: clamp(1.45rem, 4vw, 2.25rem); }
+.dashboard-atalhos h2, .dashboard-recentes h2 {
+  margin-bottom: .85rem;
+  font-size: clamp(1.15rem, 2.6vw, 1.4rem);
+  letter-spacing: -.035em;
+}
+.dashboard-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .85rem;
+}
+.dashboard-card, .dashboard-recente {
+  display: grid;
+  position: relative;
+  padding: clamp(.9rem, 3vw, 1.25rem);
+  border: 1px solid var(--line);
+  border-radius: .9rem;
+  background: var(--surface);
+  transition: border-color .18s ease, background-color .18s ease;
+}
+.dashboard-card {
+  height: 100%;
+  min-height: 5.5rem;
+  align-content: start;
+  padding-right: 2rem;
+  font-size: 1.04rem;
+  font-weight: 750;
+}
+.dashboard-card:hover, .dashboard-recente:hover {
+  border-color: #8d6047;
+  background-color: #2b2326;
+}
+.dashboard-grade > li:has(.dashboard-card-principal) { grid-column: 1 / -1; }
+.dashboard-card-principal {
+  align-content: end;
+  min-height: clamp(10rem, 21vw, 14rem);
+  color: var(--accent-bright);
+  font-size: clamp(1.7rem, 4vw, 2.45rem);
+  line-height: 1;
+  letter-spacing: -.05em;
+  background:
+    linear-gradient(90deg, #1c1218 0%, #1c1218ef 32%, #1c12182a 100%),
+    url("/sala-de-cinema.webp") center / cover,
+    #29191c;
+}
+.dashboard-seta {
+  position: absolute;
+  right: 1rem;
+  top: 1.02rem;
+  color: var(--accent);
+  font-size: 1.15rem;
+}
+.dashboard-lista { display: grid; gap: .6rem; }
+.dashboard-recente { gap: .25rem; }
+.dashboard-endereco { overflow-wrap: anywhere; }
+.dashboard-contagem, .dashboard-vazio { color: var(--muted); font-size: .9rem; }
 
 .hero {
   position: relative;
@@ -488,19 +574,12 @@ button:disabled { opacity: .53; cursor: wait; }
   .site-header-inner { min-height: 3.8rem; }
   .app-com-menu {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
   }
   .app-com-menu .site-header-inner { margin-inline: .8rem; }
   .app-com-menu > main.shell { grid-column: 1; }
-  .menu-lateral {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .35rem;
-    padding: .55rem .8rem;
-    border-inline-end: 0;
-    border-bottom: 1px solid #2a262a;
-  }
-  .menu-link { padding-inline: .6rem; font-size: .84rem; }
+  .botao.menu-toggle { display: inline-flex; }
+  .dashboard-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .painel-busca { width: calc(100% - 1rem); margin-top: -1.4rem; }
   .campo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campo.campo-simples { grid-template-columns: minmax(0, 1fr); }
@@ -513,6 +592,10 @@ button:disabled { opacity: .53; cursor: wait; }
   }
   .hero-content { padding-bottom: 2.6rem; }
   #resultados.grade-catalogo { grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.4rem), 1fr)); }
+}
+
+@media (max-width: 26rem) {
+  .dashboard-grade { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {

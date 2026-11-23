@@ -3,6 +3,7 @@ import { addMediaLinks } from "./midia.js";
 
 const form = document.querySelector("#busca");
 const input = document.querySelector("#url");
+const titleInput = document.querySelector("#titulo-busca");
 const scanButton = document.querySelector("#varrer");
 const filmsMp4Button = document.querySelector("#usar-filmesmp4");
 const stopButton = document.querySelector("#parar");
@@ -15,12 +16,13 @@ function setBusy(value) {
   scanButton.disabled = filmsMp4Button.disabled = value;
 }
 
-function showTitle(title, catalogUrl) {
+function showTitle(title, catalogUrl, titleQuery) {
   const row = document.createElement("li");
   row.className = "titulo";
 
   const params = new URLSearchParams({ url: title.url, titulo: title.titulo, catalogo: catalogUrl });
   if (title.capa) params.set("capa", title.capa);
+  if (titleQuery) params.set("buscaTitulo", titleQuery);
   const link = document.createElement("a");
   link.className = "titulo-card";
   link.href = `/titulo.html?${params}`;
@@ -48,7 +50,16 @@ function showTitle(title, catalogUrl) {
   results.append(row);
 }
 
-async function scanCatalog(address) {
+function titleWords(value) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+async function scanCatalog(address, titleQuery = "") {
+  const terms = titleWords(titleQuery);
+  if (titleInput && !terms.length) {
+    status.textContent = "Informe o nome do filme ou série.";
+    return;
+  }
   let initial;
   try {
     initial = new URL(address.includes("://") ? address : `https://${address}`);
@@ -66,10 +77,13 @@ async function scanCatalog(address) {
   stopButton.hidden = false;
   results.replaceChildren();
   results.classList.add("grade-catalogo");
-  status.textContent = `Buscando capas em ${initial.hostname}…`;
+  status.textContent = titleInput
+    ? `Buscando “${titleQuery}” em ${initial.hostname}…`
+    : `Buscando capas em ${initial.hostname}…`;
   const pages = new Set();
   const titles = new Set();
   const videos = new Map();
+  let shownTitles = 0;
   let downloadDireto = true;
   let page = initial.href;
   let usedCache = false;
@@ -80,7 +94,7 @@ async function scanCatalog(address) {
       : withOrigin;
   }
   function showCatalogVideos() {
-    if (titles.size || !videos.size) return 0;
+    if (titleInput || titles.size || !videos.size) return 0;
     results.classList.remove("grade-catalogo");
     return addMediaLinks(results, videos.values(), downloadDireto).length;
   }
@@ -88,36 +102,47 @@ async function scanCatalog(address) {
     while (page && !pages.has(page)) {
       pages.add(page);
       const catalog = await query("catalogo", { url: page }, signal, { paginaInicial: pages.size === 1 });
+      signal.throwIfAborted();
       usedCache ||= catalog.desatualizado === true;
       for (const title of catalog.titulos) {
         if (titles.has(title.url)) continue;
         titles.add(title.url);
-        showTitle(title, initial.href);
+        if (terms.length) {
+          const words = titleWords(title.titulo);
+          if (!terms.every(term => words.some(word => word.includes(term)))) continue;
+        }
+        showTitle(title, initial.href, titleQuery);
+        shownTitles++;
       }
-      if (catalog.videos?.length) {
+      if (!titleInput && catalog.videos?.length) {
         downloadDireto = catalog.downloadDireto !== false;
         for (const video of catalog.videos) videos.set(video.url, video);
       }
       page = catalog.proxima;
       if (page && !pages.has(page)) {
-        showCatalogStatus(`${titles.size} título(s) no catálogo. Buscando mais capas…`);
+        showCatalogStatus(titleInput
+          ? `${shownTitles} resultado(s) para “${titleQuery}”. Verificando mais páginas…`
+          : `${titles.size} título(s) no catálogo. Buscando mais capas…`);
       }
     }
     const mediaCount = showCatalogVideos();
-    if (titles.size) {
-      showCatalogStatus("Escolha uma capa para ver as opções de download.");
+    if (shownTitles) {
+      const matches = titleInput ? `${shownTitles} resultado(s) para “${titleQuery}”. ` : "";
+      showCatalogStatus(`${matches}Escolha uma capa para ver as opções de download.`);
     } else if (mediaCount) {
       showCatalogStatus(`${mediaCount} link(s) direto(s) encontrado(s).`);
+    } else if (titleInput && titles.size) {
+      showCatalogStatus(`Nenhum título corresponde a “${titleQuery}”.`);
     } else {
       showCatalogStatus("Nenhuma capa com link foi encontrada nas páginas do catálogo.");
     }
   } catch (error) {
     const mediaCount = showCatalogVideos();
     if (signal.aborted) {
-      const count = mediaCount ? `${mediaCount} link(s)` : `${titles.size} capa(s)`;
+      const count = mediaCount ? `${mediaCount} link(s)` : `${shownTitles} capa(s)`;
       showCatalogStatus(`Varredura interrompida. ${count} exibido(s).`);
     } else {
-      const partial = titles.size || mediaCount ? " Os resultados encontrados foram mantidos." : "";
+      const partial = shownTitles || mediaCount ? " Os resultados encontrados foram mantidos." : "";
       showCatalogStatus(`Falha ao carregar o catálogo. ${error.message}${partial}`);
     }
   } finally {
@@ -132,7 +157,7 @@ form.addEventListener("submit", event => {
   if (scanButton.disabled) return;
   const address = input.value.trim();
   if (address) {
-    scanCatalog(address);
+    scanCatalog(address, titleInput?.value.trim());
   } else {
     status.textContent = "Informe o endereço do catálogo.";
   }
@@ -144,8 +169,13 @@ filmsMp4Button.addEventListener("click", () => {
 });
 stopButton.addEventListener("click", () => scan?.abort());
 
-const savedCatalog = new URLSearchParams(location.search).get("catalogo");
+const parameters = new URLSearchParams(location.search);
+const savedCatalog = parameters.get("catalogo");
+if (titleInput) {
+  const savedTitle = parameters.get("buscaTitulo")?.trim() ?? "";
+  titleInput.value = savedTitle.slice(0, titleInput.maxLength);
+}
 if (savedCatalog) {
   input.value = savedCatalog === "1" ? filmsMp4 : savedCatalog;
-  form.requestSubmit(scanButton);
 }
+if (titleInput ? titleInput.value : savedCatalog) form.requestSubmit(scanButton);
