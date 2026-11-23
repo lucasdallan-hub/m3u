@@ -62,8 +62,10 @@ input, button { font: inherit; }
   border-left: .53rem solid var(--accent-ink);
 }
 .app-com-menu {
+  --largura-menu: clamp(12.5rem, 17vw, 15rem);
+  --altura-marca: 4.5rem;
   display: grid;
-  grid-template-columns: clamp(10.5rem, 16vw, 13rem) minmax(0, 1fr);
+  grid-template-columns: var(--largura-menu) minmax(0, 1fr);
   grid-template-rows: auto 1fr;
 }
 .app-com-menu > .site-header { grid-column: 1 / -1; }
@@ -95,6 +97,7 @@ input, button { font: inherit; }
   border-color: #674a36;
   color: var(--accent-bright);
   background: #32251f;
+  box-shadow: inset 3px 0 var(--accent);
 }
 .menu-link:focus-visible { outline-offset: 2px; }
 .botao.menu-toggle { display: none; }
@@ -113,6 +116,31 @@ input, button { font: inherit; }
 }
 .menu-gaveta::backdrop { background: #08070abf; }
 .menu-gaveta .menu-lateral { padding: 1rem 0 0; border: 0; }
+
+@media (width > 46rem) {
+  .app-com-menu { grid-template-rows: 1fr; }
+  .app-com-menu > .site-header {
+    position: fixed;
+    inset: 0 auto auto 0;
+    width: var(--largura-menu);
+    height: var(--altura-marca);
+    border-inline-end: 1px solid #2a262a;
+    z-index: 2;
+  }
+  .app-com-menu .site-header-inner {
+    height: 100%;
+    min-height: 0;
+    margin-inline: 1rem;
+  }
+  .app-com-menu > .menu-lateral {
+    position: fixed;
+    inset: var(--altura-marca) auto 0 0;
+    width: var(--largura-menu);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    z-index: 1;
+  }
+}
 
 .pagina-inicial { padding-block: 1.65rem 4.5rem; }
 .pagina-catalogo { padding-block: clamp(1.65rem, 4vw, 3rem) 4.5rem; }
