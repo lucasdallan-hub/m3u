@@ -592,7 +592,30 @@ button:disabled { opacity: .53; cursor: wait; }
 #playlist-estado:not(:empty) { margin-top: 1rem; overflow-wrap: anywhere; }
 
 .playlist-conteudo { margin-top: 1.75rem; }
+.playlist-limpeza { margin-top: 1.5rem; }
 .playlist-conteudo h2 { margin-bottom: .25rem; }
+.playlist-abas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin-block: .75rem;
+}
+.playlist-abas button {
+  padding: .45rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.playlist-abas button:hover { border-color: var(--accent); }
+.playlist-abas button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
 .playlist-grade {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));

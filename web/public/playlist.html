@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#121215">
-  <title>Limpar playlist M3U | Filmes Diretos</title>
+  <title>Catálogo M3U | Filmes Diretos</title>
   <link rel="stylesheet" href="/estilo.css">
   <script src="/menu.js" type="module"></script>
   <script src="/playlist-tool.js" type="module"></script>
@@ -24,27 +24,33 @@
       <a class="detalhe-voltar" href="/"><span aria-hidden="true">←</span> Voltar à busca</a>
     </nav>
     <section class="playlist-painel" aria-labelledby="playlist-titulo">
-      <h1 id="playlist-titulo">Limpar playlist M3U</h1>
-      <p>Se dois itens tiverem o mesmo nome e a mesma capa, a playlist mantém o primeiro.</p>
-
-      <form id="playlist-form">
-        <div class="playlist-arquivo">
-          <label for="playlist-arquivo">Arquivo M3U ou M3U8</label>
-          <input id="playlist-arquivo" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" aria-describedby="playlist-ajuda" required>
-          <p id="playlist-ajuda">O arquivo é processado no navegador.</p>
-        </div>
+      <h1 id="playlist-titulo">Catálogo M3U</h1>
+      <div class="playlist-arquivo">
+        <label for="playlist-arquivo">Arquivo M3U ou M3U8</label>
+        <input id="playlist-arquivo" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" aria-describedby="playlist-ajuda">
+        <p id="playlist-ajuda">O arquivo é processado no navegador.</p>
+      </div>
+      <p id="playlist-importacao" role="status"></p>
+    </section>
+    <section class="playlist-conteudo" id="playlist-conteudo" aria-labelledby="playlist-conteudo-titulo" hidden>
+      <h2 id="playlist-conteudo-titulo">Itens importados</h2>
+      <div class="playlist-abas" role="group" aria-label="Tipo de conteúdo">
+        <button type="button" data-type="all" aria-pressed="true" aria-controls="playlist-itens">Todos</button>
+        <button type="button" data-type="channel" aria-pressed="false" aria-controls="playlist-itens">Canais</button>
+        <button type="button" data-type="movie" aria-pressed="false" aria-controls="playlist-itens">Filmes</button>
+        <button type="button" data-type="series" aria-pressed="false" aria-controls="playlist-itens">Séries</button>
+        <button type="button" data-type="unknown" aria-pressed="false" aria-controls="playlist-itens">Não identificados</button>
+      </div>
+      <p id="playlist-contagem" role="status"></p>
+      <ul class="playlist-grade" id="playlist-itens"></ul>
+      <button class="botao secundario" id="playlist-mais" type="button" aria-controls="playlist-itens" hidden>Mostrar mais itens</button>
+      <form id="playlist-form" class="playlist-limpeza">
         <div class="playlist-acoes">
           <button class="botao primario" type="submit" disabled>Remover duplicados</button>
           <a class="botao secundario" id="playlist-baixar" download hidden>Baixar playlist limpa</a>
         </div>
         <p id="playlist-estado" role="status"></p>
       </form>
-    </section>
-    <section class="playlist-conteudo" id="playlist-conteudo" aria-labelledby="playlist-conteudo-titulo" hidden>
-      <h2 id="playlist-conteudo-titulo">Conteúdo do arquivo</h2>
-      <p id="playlist-contagem" role="status"></p>
-      <ul class="playlist-grade" id="playlist-itens"></ul>
-      <button class="botao secundario" id="playlist-mais" type="button" aria-controls="playlist-itens" hidden>Mostrar mais itens</button>
     </section>
   </main>
 </body>

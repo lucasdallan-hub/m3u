@@ -56,6 +56,6 @@ O catálogo reaproveita por dois minutos as páginas carregadas com sucesso pelo
 
 Na versão web, **Buscar links** também aceita um endereço HTTPS de arquivo `.torrent` ou um link magnet. A busca em páginas reconhece essas opções quando estão publicadas no HTML. Use **Baixar .torrent** nos domínios autorizados pelo Worker ou abra o arquivo na origem no modo aberto. **Abrir no cliente BitTorrent** entrega o magnet ao aplicativo instalado no dispositivo. A transferência entre pares é feita pelo cliente BitTorrent.
 
-### Limpar playlists M3U
+### Importar e limpar playlists M3U
 
-No menu **Limpar M3U**, selecione um arquivo `.m3u` ou `.m3u8`, clique em **Remover duplicados** e baixe a playlist limpa. A ferramenta mantém a primeira entrada quando coincidem o nome e a URL de capa (`tvg-logo`). Entre entradas sem nome ou capa, ela exige a mesma URL da mídia e compara o nome quando disponível. A ordem dos itens e os metadados das entradas mantidas são preservados. O arquivo é processado no navegador, e manifestos de streaming HLS ficam fora da limpeza.
+No menu **Catálogo M3U**, selecione um arquivo `.m3u` ou `.m3u8` para ver os itens originais, inclusive os repetidos. O catálogo mostra nome, capa e categoria quando disponíveis. Use **Mostrar mais itens** para percorrer a lista. Depois, se quiser gerar uma cópia limpa, clique em **Remover duplicados** e baixe o resultado. A ferramenta mantém a primeira entrada quando coincidem o nome e a URL de capa (`tvg-logo`). Entre entradas sem nome ou capa, ela exige a mesma URL da mídia e compara o nome quando disponível. A ordem dos itens e os metadados das entradas mantidas são preservados. O arquivo é processado no navegador, e manifestos de streaming HLS ficam fora da limpeza.

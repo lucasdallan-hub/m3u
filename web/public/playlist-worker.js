@@ -1,6 +1,6 @@
-import { cleanPlaylist } from "./playlist.js";
+import { cleanPlaylist, importPlaylist } from "./playlist.js";
 
-self.addEventListener("message", async ({ data: file }) => {
+self.addEventListener("message", async ({ data: { file, clean } }) => {
   try {
     const bytes = await file.arrayBuffer();
     let texto;
@@ -12,7 +12,8 @@ self.addEventListener("message", async ({ data: file }) => {
       texto = new TextDecoder("windows-1252").decode(bytes);
       convertido = true;
     }
-    self.postMessage({ ...cleanPlaylist(texto, { includeItems: true }), convertido });
+    const result = clean ? cleanPlaylist(texto) : importPlaylist(texto);
+    self.postMessage({ ...result, convertido });
   } catch (error) {
     self.postMessage({ erro: error.message || "Não foi possível ler a playlist." });
   }

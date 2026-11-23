@@ -4,7 +4,7 @@ const pages = [
   { id: "filmes", href: "/filmes.html", label: "Buscar filmes" },
   { id: "busca", href: "/", label: "Buscar links" },
   { id: "catalogo", href: "/catalogo.html", label: "Varrer catálogo" },
-  { id: "playlist", href: "/playlist.html", label: "Limpar M3U" },
+  { id: "playlist", href: "/playlist.html", label: "Catálogo M3U" },
 ];
 
 if (menu) {

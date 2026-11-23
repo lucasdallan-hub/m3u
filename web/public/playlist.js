@@ -47,7 +47,7 @@ function entryMetadata(body, lineNumber) {
   const attribute = /(?:^|\s)([a-z_][a-z\d_.:-]*)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/gi;
   for (const [, key, doubleQuoted, singleQuoted, unquoted] of body.slice(0, separator).matchAll(attribute)) {
     const field = key.toLowerCase();
-    if (field !== "tvg-name" && field !== "tvg-logo" && field !== "group-title") continue;
+    if (!["tvg-name", "tvg-logo", "group-title", "tvg-type"].includes(field)) continue;
     const value = doubleQuoted ?? singleQuoted ?? unquoted;
     attributes.set(field, value.replace(/\\(["'\\])/g, "$1"));
   }
@@ -56,7 +56,23 @@ function entryMetadata(body, lineNumber) {
     name: body.slice(separator + 1).trim() || attributes.get("tvg-name")?.trim() || "",
     cover: normalizedCover(attributes.get("tvg-logo") ?? ""),
     group: attributes.get("group-title")?.trim() ?? "",
+    type: attributes.get("tvg-type")?.trim() ?? "",
   };
+}
+
+function contentType(metadata, address) {
+  const path = address.replace(/^(?:[a-z][a-z\d+.-]*:)?\/\/[^/]+/i, "");
+  const section = path.match(/^\/?(live|movie|series)\//i)?.[1].toLowerCase();
+  if (section === "live") return "channel";
+  if (section) return section;
+
+  const labels = normalizedName(`${metadata?.type ?? ""} ${metadata?.group ?? ""}`)
+    .normalize("NFD").replace(/\p{M}/gu, "");
+  if (/\b(s\d{1,3}[ ._-]*e\d{1,4}|\d{1,3}x\d{2,4}|episodio\s+\d+)\b/i.test(metadata?.name ?? "") ||
+      /\b(series?|seriados?|tv shows?)\b/.test(labels)) return "series";
+  if (/\b(filmes?|movies?|cinema)\b/.test(labels)) return "movie";
+  if (/\b(canal|canais|channels?|live|ao vivo|tv)\b/.test(labels)) return "channel";
+  return "unknown";
 }
 
 function isMediaAddress(line) {
@@ -74,7 +90,7 @@ function isMediaAddress(line) {
   return !/[<>{}]/.test(path) && (mediaExtension.test(path) || /(?:^|[^/\\])[\/\\][^/\\]/.test(path));
 }
 
-export function cleanPlaylist(text, { includeItems = false } = {}) {
+function parsePlaylist(text, catalogOnly) {
   if (typeof text !== "string" || !text.trim() || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) {
     throw new Error("O arquivo deve conter uma playlist M3U ou M3U8 de texto.");
   }
@@ -83,7 +99,7 @@ export function cleanPlaylist(text, { includeItems = false } = {}) {
   const lines = text.slice(bom.length).split(/(\r\n|\n|\r)/);
   const output = [bom];
   const identities = new Set();
-  const items = includeItems ? [] : null;
+  const items = [];
   let pending = [];
   let metadata = null;
   let total = 0;
@@ -104,11 +120,12 @@ export function cleanPlaylist(text, { includeItems = false } = {}) {
         throw new Error(`Metadados #EXTINF inválidos na linha ${lineNumber}.`);
       }
       metadata = entryMetadata(line.slice("#EXTINF:".length), lineNumber);
-      pending.push(raw);
+      if (!catalogOnly) pending.push(raw);
       continue;
     }
 
     if (!line || line.startsWith("#")) {
+      if (catalogOnly) continue;
       if (pending.length || entryDirective.test(line)) {
         pending.push(raw);
       } else {
@@ -121,17 +138,20 @@ export function cleanPlaylist(text, { includeItems = false } = {}) {
     }
 
     total++;
-    const name = normalizedName(metadata?.name ?? "");
     const cover = metadata?.cover ?? "";
-    if (items) {
+    if (catalogOnly) {
       const path = line.split(/[|?#]/, 1)[0].trimEnd();
       const filename = path.split(/[\\/]/).filter(Boolean).pop();
       items.push({
         name: metadata?.name || filename || `Item ${total}`,
         cover,
         group: metadata?.group ?? "",
+        type: contentType(metadata, path),
       });
+      metadata = null;
+      continue;
     }
+    const name = normalizedName(metadata?.name ?? "");
     const key = JSON.stringify(name && cover ? ["cover", name, cover] : ["address", name, line]);
     if (identities.has(key)) {
       removidos++;
@@ -146,6 +166,13 @@ export function cleanPlaylist(text, { includeItems = false } = {}) {
 
   if (metadata) throw new Error("A última entrada #EXTINF não tem endereço de mídia.");
   if (!total) throw new Error("A playlist não contém endereços de mídia.");
-  const result = { texto: output.join("") + pending.join(""), total, removidos };
-  return items ? { ...result, items } : result;
+  return catalogOnly ? { items } : { texto: output.join("") + pending.join(""), total, removidos };
+}
+
+export function importPlaylist(text) {
+  return parsePlaylist(text, true);
+}
+
+export function cleanPlaylist(text) {
+  return parsePlaylist(text, false);
 }

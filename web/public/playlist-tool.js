@@ -3,15 +3,20 @@ const input = document.querySelector("#playlist-arquivo");
 const button = form.querySelector("button");
 const download = document.querySelector("#playlist-baixar");
 const status = document.querySelector("#playlist-estado");
+const importStatus = document.querySelector("#playlist-importacao");
 const preview = document.querySelector("#playlist-conteudo");
 const count = document.querySelector("#playlist-contagem");
 const list = document.querySelector("#playlist-itens");
 const more = document.querySelector("#playlist-mais");
+const tabs = document.querySelectorAll(".playlist-abas button");
 const format = new Intl.NumberFormat("pt-BR");
+const typeLabels = { channel: "Canal", movie: "Filme", series: "Série", unknown: "Não identificado" };
 const batchSize = 48;
 let selection = 0;
 let result = null;
 let shown = 0;
+let filteredItems = [];
+let itemsByType = null;
 
 function resetDownload() {
   if (!download.hidden) URL.revokeObjectURL(download.href);
@@ -20,7 +25,7 @@ function resetDownload() {
   status.textContent = "";
 }
 
-function processPlaylist(file) {
+function processPlaylist(file, clean = false) {
   const worker = new Worker("/playlist-worker.js", { type: "module" });
   return new Promise((resolve, reject) => {
     worker.addEventListener("message", ({ data }) => {
@@ -30,16 +35,16 @@ function processPlaylist(file) {
     worker.addEventListener("error", () => {
       reject(new Error("Não foi possível processar o arquivo."));
     }, { once: true });
-    worker.postMessage(file);
+    worker.postMessage({ file, clean });
   }).finally(() => worker.terminate());
 }
 
 function appendItems() {
-  const { items } = result;
+  const items = filteredItems;
   const end = Math.min(shown + batchSize, items.length);
   const batch = document.createDocumentFragment();
 
-  for (const { name, cover, group } of items.slice(shown, end)) {
+  for (const { name, cover, group, type } of items.slice(shown, end)) {
     const card = document.createElement("li");
     const artwork = document.createElement("div");
     artwork.className = "playlist-capa";
@@ -59,17 +64,17 @@ function appendItems() {
     const title = document.createElement("h3");
     title.textContent = name;
     card.append(artwork, title);
-    if (group) {
-      const category = document.createElement("p");
-      category.textContent = group;
-      card.append(category);
-    }
+    const category = document.createElement("p");
+    category.textContent = group ? `${typeLabels[type]} · ${group}` : typeLabels[type];
+    card.append(category);
     batch.append(card);
   }
 
   list.append(batch);
   shown = end;
-  count.textContent = items.length === 1
+  count.textContent = items.length === 0
+    ? "Nenhum item deste tipo."
+    : items.length === 1
     ? "1 item"
     : `${format.format(shown)} de ${format.format(items.length)} itens`;
   more.hidden = shown === items.length;
@@ -77,42 +82,67 @@ function appendItems() {
 
 more.addEventListener("click", appendItems);
 
+function selectType(type) {
+  for (const tab of tabs) {
+    tab.setAttribute("aria-pressed", String(tab.dataset.type === type));
+  }
+  filteredItems = type === "all" ? result.items : itemsByType[type];
+  shown = 0;
+  list.replaceChildren();
+  appendItems();
+}
+
+for (const tab of tabs) {
+  tab.addEventListener("click", () => {
+    if (result && tab.getAttribute("aria-pressed") !== "true") selectType(tab.dataset.type);
+  });
+}
+
 input.addEventListener("change", async () => {
   const currentSelection = ++selection;
   const file = input.files[0];
   resetDownload();
   button.disabled = true;
   result = null;
+  filteredItems = [];
+  itemsByType = null;
   shown = 0;
   preview.hidden = true;
   more.hidden = true;
   list.replaceChildren();
+  importStatus.textContent = "";
   if (!file) return;
 
-  status.textContent = "Lendo a playlist…";
+  importStatus.textContent = "Importando a playlist…";
   try {
     const parsed = await processPlaylist(file);
     if (currentSelection !== selection) return;
     result = parsed;
+    itemsByType = { channel: [], movie: [], series: [], unknown: [] };
+    for (const item of parsed.items) itemsByType[item.type].push(item);
     preview.hidden = false;
-    appendItems();
+    selectType("all");
     button.disabled = false;
-    status.textContent = "";
+    importStatus.textContent = `${format.format(parsed.items.length)} ${parsed.items.length === 1 ? "item importado" : "itens importados"}. Inclui as entradas repetidas.`;
   } catch (error) {
     if (currentSelection === selection) {
-      status.textContent = error.message || "Não foi possível processar o arquivo.";
+      importStatus.textContent = error.message || "Não foi possível importar o arquivo.";
     }
   }
 });
 
-form.addEventListener("submit", event => {
+form.addEventListener("submit", async event => {
   event.preventDefault();
   const file = input.files[0];
   if (!file || !result || button.disabled) return;
 
   resetDownload();
+  const currentSelection = selection;
+  button.disabled = true;
+  status.textContent = "Removendo duplicados…";
   try {
-    const { texto, total, removidos, convertido } = result;
+    const { texto, total, removidos, convertido } = await processPlaylist(file, true);
+    if (currentSelection !== selection) return;
     const base = file.name.replace(/\.(?:m3u8?)$/i, "") || "playlist";
     const extension = /\.m3u8$/i.test(file.name) ? "m3u8" : "m3u";
     const blob = new Blob([texto], { type: "audio/x-mpegurl;charset=utf-8" });
@@ -123,6 +153,10 @@ form.addEventListener("submit", event => {
     status.textContent = `${duplicates}. ${format.format(total - removidos)} de ${format.format(total)} itens mantidos.`;
     if (convertido) status.textContent += " O novo arquivo está em UTF-8.";
   } catch (error) {
-    status.textContent = error.message || "Não foi possível processar o arquivo.";
+    if (currentSelection === selection) {
+      status.textContent = error.message || "Não foi possível processar o arquivo.";
+    }
+  } finally {
+    if (currentSelection === selection) button.disabled = false;
   }
 });
