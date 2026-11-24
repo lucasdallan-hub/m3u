@@ -138,7 +138,7 @@ function appendItems() {
     if (media) {
       artwork.type = "button";
       artwork.setAttribute("aria-label", `Reproduzir ${name}`);
-      artwork.addEventListener("click", () => openPlaylistMedia(name, media, type));
+      artwork.addEventListener("click", () => openPlaylistMedia(name, media, type, address));
     }
     const placeholder = document.createElement("span");
     placeholder.textContent = "Sem capa";

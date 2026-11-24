@@ -58,4 +58,10 @@ Na versão web, **Buscar links** também aceita um endereço HTTPS de arquivo `.
 
 ### Importar e limpar playlists M3U
 
+Clique na capa de um canal para abrir o player. Em endereços HTTP(S), ele tenta reproduzir HLS (`.m3u8`), MPEG-DASH (`.mpd`), MPEG-TS (`.ts`, `.m2ts`), HTTP-FLV e formatos nativos do navegador, como MP4 e WebM. Para fontes compatíveis com a instalação do FFmpeg, o serviço de reprodução pode converter a transmissão para HLS com vídeo H.264 e áudio AAC, exibido no mesmo player. A origem precisa entregar mídia acessível.
+
+Para testar o conversor local, instale FFmpeg com `libx264`, crie um JSON com uma lista das URLs exatas de transmissões que você está autorizado a retransmitir e execute `python3 relay.py --sources /caminho/canais.json`. Abra a página `/playlist.html` na porta 8788 e importe a playlist. O conversor usa somente URLs configuradas, reaproveita a mesma conversão entre espectadores e limita a três canais simultâneos.
+
+O Cloudflare Worker não executa FFmpeg. Em produção, execute o conversor atrás de um proxy HTTPS e configure `REPRODUCAO_ORIGEM` no Worker com a origem HTTPS desse proxy. Configure o mesmo segredo `REPRODUCAO_TOKEN` no Worker e no processo Python. Restrinja a saída de rede do conversor às origens confiáveis necessárias, incluindo destinos de redirecionamento e segmentos HLS. O arquivo com as URLs fica no servidor do conversor.
+
 No menu **Catálogo M3U**, selecione um arquivo `.m3u` ou `.m3u8` para ver os itens originais, inclusive os repetidos. O catálogo mostra nome, capa e categoria quando disponíveis. Use **Mostrar mais itens** para percorrer a lista. Depois, se quiser gerar uma cópia limpa, clique em **Remover duplicados** e baixe o resultado. A ferramenta mantém a primeira entrada quando coincidem o nome e a URL de capa (`tvg-logo`). Entre entradas sem nome ou capa, ela exige a mesma URL da mídia e compara o nome quando disponível. A ordem dos itens e os metadados das entradas mantidas são preservados. O arquivo é processado no navegador, e manifestos de streaming HLS ficam fora da limpeza.

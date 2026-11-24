@@ -663,9 +663,58 @@ async function download(url, hosts) {
   });
 }
 
+async function relayPlayback(request, endpoint, env) {
+  const start = endpoint.pathname === "/api/reproducao/iniciar";
+  const hls = /^\/api\/reproducao\/[a-f0-9]{32}\/(?:index\.m3u8|\d+\.ts)$/.test(endpoint.pathname);
+  if ((!start && !hls) || request.method !== (start ? "POST" : "GET")) {
+    return Response.json({ erro: "Rota de reprodução inválida." }, { status: 404 });
+  }
+  try {
+    const origin = new URL(env.REPRODUCAO_ORIGEM);
+    if (origin.protocol !== "https:" || !env.REPRODUCAO_TOKEN) throw new Error();
+    const headers = new Headers({ Authorization: `Bearer ${env.REPRODUCAO_TOKEN}` });
+    let body;
+    if (start) {
+      if (!request.body) return Response.json({ erro: "Endereço ausente." }, { status: 400 });
+      const reader = request.body.getReader();
+      const buffer = new Uint8Array(8192);
+      let used = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (used + value.length > buffer.length) {
+          await reader.cancel();
+          return Response.json({ erro: "Endereço longo demais." }, { status: 413 });
+        }
+        buffer.set(value, used);
+        used += value.length;
+      }
+      body = buffer.subarray(0, used);
+      headers.set("Content-Type", request.headers.get("Content-Type") ?? "");
+    }
+    const response = await fetch(new URL(endpoint.pathname, origin), {
+      method: request.method,
+      body,
+      headers,
+      redirect: "error",
+    });
+    return new Response(response.body, {
+      status: response.status,
+      headers: {
+        "Content-Type": response.headers.get("Content-Type") ?? "application/octet-stream",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch {
+    return Response.json({ erro: "O serviço de reprodução HLS ainda não está configurado ou não respondeu." }, { status: 503 });
+  }
+}
+
 export default {
   async fetch(request, env, context) {
     const endpoint = new URL(request.url);
+    if (endpoint.pathname.startsWith("/api/reproducao/")) return relayPlayback(request, endpoint, env);
     if (!["/api/busca", "/api/baixar", "/api/catalogo", "/api/abrir"].includes(endpoint.pathname)) {
       return Response.json({ erro: "Rota não encontrada." }, {
         status: 404,
