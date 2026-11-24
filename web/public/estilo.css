@@ -660,6 +660,46 @@ button:disabled { opacity: .53; cursor: wait; }
   object-fit: contain;
   background: var(--raised);
 }
+button.playlist-capa {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+button.playlist-capa::after {
+  content: "▶";
+  position: absolute;
+  inset: auto .4rem .4rem auto;
+  padding: .3rem .5rem;
+  border-radius: .35rem;
+  background: #151418e8;
+  color: var(--ink);
+}
+.playlist-player {
+  width: min(48rem, calc(100% - 2rem));
+  padding: clamp(.75rem, 3vw, 1.4rem);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+.playlist-player::backdrop { background: #000b; }
+.playlist-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+.playlist-player-header h2 { overflow-wrap: anywhere; }
+.playlist-player video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 65vh;
+  background: #000;
+}
+#playlist-player-status { margin-block: .65rem; }
 .playlist-grade h3 { margin: .55rem 0 0; font-size: .95rem; }
 .playlist-grade p { margin-top: .2rem; font-size: .82rem; }
 

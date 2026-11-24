@@ -147,6 +147,7 @@ function parsePlaylist(text, catalogOnly) {
         cover,
         group: metadata?.group ?? "",
         type: contentType(metadata, path),
+        address: line.split("|", 1)[0].trimEnd(),
       });
       metadata = null;
       continue;

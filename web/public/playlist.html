@@ -63,5 +63,16 @@
       </form>
     </section>
   </main>
+  <dialog class="playlist-player" id="playlist-player" aria-labelledby="playlist-player-title">
+    <div class="playlist-player-header">
+      <h2 id="playlist-player-title"></h2>
+      <form method="dialog">
+        <button class="botao secundario" type="submit" autofocus>Fechar</button>
+      </form>
+    </div>
+    <video id="playlist-video" controls playsinline preload="none"></video>
+    <p id="playlist-player-status" role="status"></p>
+    <a class="botao secundario" id="playlist-player-link" target="_blank" rel="noopener noreferrer">Abrir mídia na origem</a>
+  </dialog>
 </body>
 </html>

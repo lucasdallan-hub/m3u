@@ -1,4 +1,5 @@
 import { findRepeatedMovies } from "./playlist-covers.js";
+import { openPlaylistMedia, closePlaylistMedia, playlistMediaUrl } from "./playlist-player.js";
 
 const form = document.querySelector("#playlist-form");
 const input = document.querySelector("#playlist-arquivo");
@@ -129,10 +130,16 @@ function appendItems() {
   const end = Math.min(shown + batchSize, items.length);
   const batch = document.createDocumentFragment();
 
-  for (const { name, cover, group, type } of items.slice(shown, end)) {
+  for (const { name, cover, group, type, address } of items.slice(shown, end)) {
     const card = document.createElement("li");
-    const artwork = document.createElement("div");
+    const media = playlistMediaUrl(address);
+    const artwork = document.createElement(media ? "button" : "div");
     artwork.className = "playlist-capa";
+    if (media) {
+      artwork.type = "button";
+      artwork.setAttribute("aria-label", `Reproduzir ${name}`);
+      artwork.addEventListener("click", () => openPlaylistMedia(name, media, type));
+    }
     const placeholder = document.createElement("span");
     placeholder.textContent = "Sem capa";
     artwork.append(placeholder);
@@ -186,6 +193,7 @@ for (const tab of tabs) {
 input.addEventListener("change", async () => {
   const currentSelection = ++selection;
   const file = input.files[0];
+  closePlaylistMedia();
   resetDownload();
   resetAnalysis();
   button.disabled = true;
