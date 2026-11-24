@@ -1,3 +1,5 @@
+import { findRepeatedMovies } from "./playlist-covers.js";
+
 const form = document.querySelector("#playlist-form");
 const input = document.querySelector("#playlist-arquivo");
 const button = form.querySelector("button");
@@ -9,6 +11,11 @@ const count = document.querySelector("#playlist-contagem");
 const list = document.querySelector("#playlist-itens");
 const more = document.querySelector("#playlist-mais");
 const tabs = document.querySelectorAll(".playlist-abas button");
+const analyze = document.querySelector("#playlist-analisar");
+const cancelAnalysis = document.querySelector("#playlist-cancelar-analise");
+const analysisStatus = document.querySelector("#playlist-analise-estado");
+const repeats = document.querySelector("#playlist-repetidos");
+const moreRepeats = document.querySelector("#playlist-mais-repetidos");
 const format = new Intl.NumberFormat("pt-BR");
 const typeLabels = { channel: "Canal", movie: "Filme", series: "Série", unknown: "Não identificado" };
 const batchSize = 48;
@@ -17,6 +24,84 @@ let result = null;
 let shown = 0;
 let filteredItems = [];
 let itemsByType = null;
+let analysis = null;
+let repeatedGroups = [];
+let groupsShown = 0;
+
+function showRepeatedGroups() {
+  const end = Math.min(groupsShown + 20, repeatedGroups.length);
+  const batch = document.createDocumentFragment();
+  for (const group of repeatedGroups.slice(groupsShown, end)) {
+    const item = document.createElement("li");
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `${group[0].name} · ${format.format(group.length)} entradas`;
+    details.append(summary);
+    details.addEventListener("toggle", () => {
+      if (!details.open || details.children.length > 1) return;
+      const entries = document.createElement("ul");
+      for (const movie of group) {
+        const entry = document.createElement("li");
+        entry.textContent = movie.group ? `${movie.name} · ${movie.group}` : movie.name;
+        entries.append(entry);
+      }
+      details.append(entries);
+    });
+    item.append(details);
+    batch.append(item);
+  }
+  repeats.append(batch);
+  groupsShown = end;
+  moreRepeats.hidden = end === repeatedGroups.length;
+}
+
+function resetAnalysis() {
+  analysis?.abort();
+  analysis = null;
+  analyze.disabled = false;
+  cancelAnalysis.hidden = true;
+  analysisStatus.textContent = "";
+  repeatedGroups = [];
+  groupsShown = 0;
+  repeats.replaceChildren();
+  moreRepeats.hidden = true;
+}
+
+moreRepeats.addEventListener("click", showRepeatedGroups);
+cancelAnalysis.addEventListener("click", () => analysis?.abort());
+
+analyze.addEventListener("click", async () => {
+  if (!itemsByType || analysis) return;
+  resetAnalysis();
+  const controller = new AbortController();
+  analysis = controller;
+  analyze.disabled = true;
+  cancelAnalysis.hidden = false;
+  analysisStatus.textContent = "Preparando a análise…";
+  try {
+    const { groups, unavailable } = await findRepeatedMovies(itemsByType.movie, controller.signal, (checked, total) => {
+      analysisStatus.textContent = `Títulos em comum comparados: ${format.format(checked)} de ${format.format(total)}.`;
+    });
+    if (analysis !== controller) return;
+    controller.signal.throwIfAborted();
+    repeatedGroups = groups;
+    analysisStatus.textContent = groups.length
+      ? `Grupos para revisar: ${format.format(groups.length)}.`
+      : "Nenhuma capa coincidente encontrada entre filmes com o mesmo título.";
+    if (unavailable) analysisStatus.textContent += ` Entradas sem acesso à imagem da capa: ${format.format(unavailable)}.`;
+    showRepeatedGroups();
+  } catch {
+    if (analysis === controller) {
+      analysisStatus.textContent = controller.signal.aborted ? "Análise cancelada." : "Não foi possível analisar as capas.";
+    }
+  } finally {
+    if (analysis === controller) {
+      analysis = null;
+      analyze.disabled = false;
+      cancelAnalysis.hidden = true;
+    }
+  }
+});
 
 function resetDownload() {
   if (!download.hidden) URL.revokeObjectURL(download.href);
@@ -102,6 +187,7 @@ input.addEventListener("change", async () => {
   const currentSelection = ++selection;
   const file = input.files[0];
   resetDownload();
+  resetAnalysis();
   button.disabled = true;
   result = null;
   filteredItems = [];

@@ -34,6 +34,16 @@
     </section>
     <section class="playlist-conteudo" id="playlist-conteudo" aria-labelledby="playlist-conteudo-titulo" hidden>
       <h2 id="playlist-conteudo-titulo">Itens importados</h2>
+      <section class="playlist-analise" aria-labelledby="playlist-analise-titulo">
+        <h3 id="playlist-analise-titulo">Filmes repetidos por título e capa</h3>
+        <div class="playlist-acoes">
+          <button class="botao secundario" id="playlist-analisar" type="button">Analisar filmes</button>
+          <button class="botao secundario" id="playlist-cancelar-analise" type="button" hidden>Cancelar análise</button>
+        </div>
+        <p id="playlist-analise-estado" role="status"></p>
+        <ul id="playlist-repetidos"></ul>
+        <button class="botao secundario" id="playlist-mais-repetidos" type="button" hidden>Mostrar mais grupos</button>
+      </section>
       <div class="playlist-abas" role="group" aria-label="Tipo de conteúdo">
         <button type="button" data-type="all" aria-pressed="true" aria-controls="playlist-itens">Todos</button>
         <button type="button" data-type="channel" aria-pressed="false" aria-controls="playlist-itens">Canais</button>
