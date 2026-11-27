@@ -1,7 +1,9 @@
 const videoPath = /\.(mp4|mkv|webm|mov|m4v|avi)$/i;
 const torrentPath = /\.torrent$/i;
+const playlistPath = /\.m3u8?$/i;
 const torrentMimeTypes = new Set(["application/x-bittorrent", "application/x-torrent"]);
 const pageSize = 4 * 1024 * 1024;
+const playlistSize = 32 * 1024 * 1024;
 const maxResults = 100;
 const catalogHost = "filmesmp4.biz";
 const catalogFreshMs = 2 * 60 * 1000;
@@ -118,7 +120,7 @@ function sameCatalogHost(url, origin) {
   return domain(url.hostname) === domain(new URL(origin).hostname);
 }
 
-async function requestSource(url, hosts, accept, signal, origin) {
+async function requestSource(url, hosts, accept, signal, origin, cache) {
   for (let hops = 0; hops <= 5; hops++) {
     if (origin && !sameCatalogHost(url, origin)) {
       throw new RequestError("O catálogo redirecionou para outro domínio.", 403);
@@ -128,6 +130,7 @@ async function requestSource(url, hosts, accept, signal, origin) {
       headers: { Accept: accept },
       redirect: "manual",
       signal,
+      cache,
     }, "o site de origem");
     if (redirects.has(response.status)) {
       const next = response.headers.get("Location");
@@ -194,18 +197,22 @@ function magnetLink(address) {
   return { url: url.href, name, tipo: "magnet" };
 }
 
-function boundedHtml(response, limit = pageSize) {
+function boundedBody(response, limit, tooLarge) {
   let bytes = 0;
   const limited = response.body.pipeThrough(new TransformStream({
     transform(chunk, controller) {
       bytes += chunk.byteLength;
       if (bytes > limit) {
-        throw new RequestError("A página ultrapassa o limite de leitura.", 413);
+        throw new RequestError(tooLarge, 413);
       }
       controller.enqueue(chunk);
     },
   }));
   return new Response(limited, { headers: response.headers });
+}
+
+function boundedHtml(response, limit = pageSize) {
+  return boundedBody(response, limit, "A página ultrapassa o limite de leitura.");
 }
 
 function isHtml(response) {
@@ -663,6 +670,91 @@ async function download(url, hosts) {
   });
 }
 
+async function verifiedPlaylist(response) {
+  const sizeMessage = "A playlist ultrapassa o limite de 32 MiB.";
+  if (Number(response.headers.get("Content-Length")) > playlistSize) {
+    await response.body.cancel();
+    throw new RequestError(sizeMessage, 413);
+  }
+  if (isHtml(response)) {
+    await response.body.cancel();
+    throw new RequestError("O host retornou uma página HTML. Confira o domínio e o link gerado pelo seu painel de IPTV.", 502);
+  }
+  const reader = boundedBody(response, playlistSize, sizeMessage).body.getReader();
+  const pending = [];
+  const sample = new Uint8Array(4096);
+  const decoder = new TextDecoder();
+  let used = 0;
+  try {
+    let header = "";
+    while (used < sample.length) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      pending.push(value);
+      const fragment = value.subarray(0, sample.length - used);
+      sample.set(fragment, used);
+      used += fragment.length;
+      header = decoder.decode(sample.subarray(0, used)).trimStart();
+      if (/\r|\n/.test(header)) break;
+    }
+    if (!/^#EXTM3U(?:\s|$)/i.test(header)) {
+      throw new RequestError("O host não devolveu uma playlist M3U válida. Confira o link e as permissões da lista.", 502);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    if (error instanceof RequestError) throw error;
+    throw new RequestError("A transferência da playlist foi interrompida pelo host.", 502);
+  }
+  return new ReadableStream({
+    async pull(controller) {
+      if (pending.length) {
+        controller.enqueue(pending.shift());
+        return;
+      }
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    cancel: reason => reader.cancel(reason),
+  });
+}
+
+async function downloadPlaylist(request, endpoint, hosts) {
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== endpoint.origin) throw new RequestError("Origem inválida.", 403);
+  if (!request.body || request.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
+    throw new RequestError("Informe o endereço da playlist.", 400);
+  }
+  let data;
+  try {
+    const body = boundedBody(new Response(request.body), 8192, "O endereço da playlist é longo demais.");
+    data = await body.json();
+  } catch (error) {
+    if (error instanceof RequestError) throw error;
+    throw new RequestError("Informe o endereço da playlist.");
+  }
+  const value = typeof data?.url === "string" ? data.url.trim() : "";
+  if (!value || value.length > 4096) throw new RequestError("Informe um endereço de playlist de até 4.096 caracteres.");
+  const url = allowedUrl(value.includes("://") ? value : `https://${value}`, hosts);
+  const { response, url: source } = await requestSource(
+    url, hosts, "application/vnd.apple.mpegurl, audio/mpegurl, audio/x-mpegurl, text/plain, application/octet-stream, */*;q=0.1",
+    AbortSignal.timeout(25000), undefined, "no-store",
+  );
+  const body = await verifiedPlaylist(response);
+  const name = [filename(source), filename(url)].find(item => playlistPath.test(item)) ?? "playlist.m3u";
+  const extension = name.toLowerCase().endsWith(".m3u8") ? ".m3u8" : ".m3u";
+  const attachment = name.slice(0, -extension.length).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 100) || "playlist";
+  return new Response(body, {
+    headers: {
+      ...apiHeaders,
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": `attachment; filename="${attachment}${extension}"`,
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 async function relayPlayback(request, endpoint, env) {
   const start = endpoint.pathname === "/api/reproducao/iniciar";
   const hls = /^\/api\/reproducao\/[a-f0-9]{32}\/(?:index\.m3u8|\d+\.ts)$/.test(endpoint.pathname);
@@ -715,20 +807,22 @@ export default {
   async fetch(request, env, context) {
     const endpoint = new URL(request.url);
     if (endpoint.pathname.startsWith("/api/reproducao/")) return relayPlayback(request, endpoint, env);
-    if (!["/api/busca", "/api/baixar", "/api/catalogo", "/api/abrir"].includes(endpoint.pathname)) {
+    if (!["/api/busca", "/api/baixar", "/api/catalogo", "/api/abrir", "/api/playlist"].includes(endpoint.pathname)) {
       return Response.json({ erro: "Rota não encontrada." }, {
         status: 404,
         headers: apiHeaders,
       });
     }
-    if (request.method !== "GET") {
-      return new Response(null, { status: 405, headers: { Allow: "GET" } });
+    const method = endpoint.pathname === "/api/playlist" ? "POST" : "GET";
+    if (request.method !== method) {
+      return new Response(null, { status: 405, headers: { Allow: method } });
     }
 
     try {
       const hosts = new Set((env.DOMINIOS_PERMITIDOS ?? "").toLowerCase().split(",").map(
         host => host.trim(),
       ).filter(Boolean));
+      if (endpoint.pathname === "/api/playlist") return await downloadPlaylist(request, endpoint, hosts);
       if (!hosts.size && endpoint.pathname === "/api/baixar") {
         throw new RequestError("No modo aberto o arquivo é acessado no site de origem.", 403);
       }

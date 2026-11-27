@@ -1,5 +1,6 @@
 import { query } from "./api.js";
 import { addMediaLinks } from "./midia.js";
+import { isPlaylistUrl, preparePlaylistDownload, releasePlaylistDownload } from "./playlist-download.js";
 
 const form = document.querySelector("#busca");
 const input = document.querySelector("#url");
@@ -10,11 +11,26 @@ const results = document.querySelector("#resultados");
 
 async function searchVideos(address) {
   const autoDownload = automatic.checked;
+  const playlist = isPlaylistUrl(address);
+  releasePlaylistDownload(results.querySelector("a[download]"));
   results.replaceChildren();
-  status.textContent = "Buscando links…";
+  status.textContent = playlist ? "Preparando a playlist para download…" : "Buscando links…";
   searchButton.disabled = true;
 
   try {
+    if (playlist) {
+      const row = document.createElement("li");
+      const name = document.createElement("span");
+      const link = document.createElement("a");
+      name.textContent = await preparePlaylistDownload(address, link);
+      link.textContent = "Baixar playlist";
+      row.append(name, link);
+      results.append(row);
+      if (input.value.trim() === address) input.value = "";
+      status.textContent = "Playlist pronta para baixar.";
+      if (autoDownload) link.click();
+      return;
+    }
     const data = await query("busca", { url: address });
     const links = addMediaLinks(results, data.videos, data.downloadDireto);
 

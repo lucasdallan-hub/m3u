@@ -276,7 +276,7 @@ input, button { font: inherit; }
 }
 .pagina-catalogo .painel-busca { width: 100%; margin: 0; }
 #busca { scroll-margin-top: 1.25rem; }
-#busca > label:first-child {
+#busca > label:first-child, #playlist-download-form > label {
   display: block;
   color: var(--ink);
   font-size: .89rem;
@@ -566,6 +566,8 @@ button:disabled { opacity: .53; cursor: wait; }
   font-size: clamp(1.8rem, 6vw, 3.05rem);
   letter-spacing: -.06em;
 }
+#playlist-download-form { margin-top: 1.4rem; }
+#playlist-download-status:not(:empty) { margin-bottom: .75rem; }
 .playlist-arquivo {
   display: grid;
   gap: .75rem;

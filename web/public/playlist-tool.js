@@ -1,5 +1,6 @@
 import { findRepeatedMovies } from "./playlist-covers.js";
 import { openPlaylistMedia, closePlaylistMedia, playlistMediaUrl } from "./playlist-player.js";
+import { preparePlaylistDownload, releasePlaylistDownload } from "./playlist-download.js";
 
 const form = document.querySelector("#playlist-form");
 const input = document.querySelector("#playlist-arquivo");
@@ -28,6 +29,37 @@ let itemsByType = null;
 let analysis = null;
 let repeatedGroups = [];
 let groupsShown = 0;
+
+const remoteForm = document.querySelector("#playlist-download-form");
+const remoteInput = document.querySelector("#playlist-url");
+const remoteButton = remoteForm.querySelector('button[type="submit"]');
+const remoteStatus = document.querySelector("#playlist-download-status");
+const remoteDownload = document.querySelector("#playlist-download-link");
+
+remoteForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (remoteButton.disabled) return;
+  const address = remoteInput.value.trim();
+  if (!address) {
+    remoteStatus.textContent = "Informe o endereço da playlist.";
+    return;
+  }
+  releasePlaylistDownload(remoteDownload);
+  remoteDownload.hidden = true;
+  remoteButton.disabled = true;
+  remoteStatus.textContent = "Preparando a playlist para download…";
+  try {
+    await preparePlaylistDownload(address, remoteDownload);
+    if (remoteInput.value.trim() === address) remoteInput.value = "";
+    remoteDownload.hidden = false;
+    remoteStatus.textContent = "Playlist pronta. Use o botão abaixo se o navegador não iniciar o download.";
+    remoteDownload.click();
+  } catch (error) {
+    remoteStatus.textContent = error.message;
+  } finally {
+    remoteButton.disabled = false;
+  }
+});
 
 function showRepeatedGroups() {
   const end = Math.min(groupsShown + 20, repeatedGroups.length);

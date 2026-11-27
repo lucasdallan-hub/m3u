@@ -25,6 +25,17 @@
     </nav>
     <section class="playlist-painel" aria-labelledby="playlist-titulo">
       <h1 id="playlist-titulo">Catálogo M3U</h1>
+      <form id="playlist-download-form" method="post">
+        <label for="playlist-url">Endereço da playlist</label>
+        <div class="campo campo-simples">
+          <div class="campo-url">
+            <input id="playlist-url" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://exemplo.com/lista.m3u" required maxlength="4096">
+          </div>
+          <button class="botao primario" type="submit">Baixar playlist</button>
+        </div>
+        <p id="playlist-download-status" role="status"></p>
+        <a class="botao secundario" id="playlist-download-link" download hidden>Baixar novamente</a>
+      </form>
       <div class="playlist-arquivo">
         <label for="playlist-arquivo">Arquivo M3U ou M3U8</label>
         <input id="playlist-arquivo" type="file" accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl" aria-describedby="playlist-ajuda">
